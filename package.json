@@ -1,0 +1,21 @@
+{
+  "name": "zhwp-spi-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cron": "^3.1.6",
+    "dotenv": "^16.4.1",
+    "fs": "^0.0.1-security",
+    "jquery": "^3.7.1",
+    "jsdom": "^24.0.0",
+    "moment": "^2.30.1",
+    "mwn": "^2.0.2"
+  }
+}

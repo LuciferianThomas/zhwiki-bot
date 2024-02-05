@@ -1,0 +1,7 @@
+.DS_STORE
+.dockerignore
+.env
+compose.yaml
+Dockerfile
+node_modules/*
+logs/*
