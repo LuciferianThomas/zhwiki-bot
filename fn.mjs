@@ -17,6 +17,7 @@ const win = new ( JSDOM )( '' ).window
 const $ = jquery( win, true )
 
 const log = ( message ) => {
+  console.log( message )
   fs.appendFile( './logs/debug.log', `${ time() } | ${ message }\n`, ( e ) => {
     if ( e ) return;
   } )

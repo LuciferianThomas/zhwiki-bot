@@ -14,7 +14,7 @@ const metabot = new Mwn( {
 } )
 
 async function getStewards( bot ) {
-  console.log( "正在獲取監管員列表" )
+  log( "正在獲取監管員列表" )
 
   let res = await metabot.query( {
     list: "allusers",
@@ -66,7 +66,7 @@ export default async ( bot ) => {
         && data.length.old < data.length.new
       )
     }, async ( data ) => {
-      log( `有新的Steward回覆：${ data.user }` )
+      log( `[SPI] 有新的Steward回覆：${ data.user }` )
       let { compare } = await metabot.request({
         action: "compare",
         format: "json",
@@ -99,7 +99,7 @@ export default async ( bot ) => {
         changeState = diffText.find( line => /\| *status *= *(.*?)$/m.test( line ) ).match( /\| *status *= *(.*?)$/m )[1].replace( /<!--.*?-->/g, "" ).trim()
   
       let out = `監管員[[:m:User:${ data.user }|${ data.user }]]在[[:m:SRCU]]作出了'''[[:m:Special:Diff/${ data.revision.new }|回覆]]'''${ changeState ? `並將案件狀態設為${ srcuStatus( changeState ) }` : "" }。`
-      log( `屬於${ SPIcase }` )
+      log( `[SPI] 　　屬於${ SPIcase }` )
 
       let SPIpage = new bot.page( SPIcase )
       let SPI_wt = await SPIpage.text()
@@ -125,13 +125,13 @@ export default async ( bot ) => {
           bot: true
         }
       } )
-      log( "完成發送監管員留言通知" )
+      log( "[SPI] 　　完成發送監管員留言通知" )
       return;
     } )
     
     return;
   } catch (e) {
-    log( "發送監管員留言通知時出現錯誤：" )
+    log( "[SPI] 　　發送監管員留言通知時出現錯誤：" )
     log( e )
   }
 }

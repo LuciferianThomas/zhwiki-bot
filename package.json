@@ -11,11 +11,16 @@
   "license": "ISC",
   "dependencies": {
     "cron": "^3.1.6",
+    "crypto": "^1.0.1",
     "dotenv": "^16.4.1",
     "fs": "^0.0.1-security",
     "jquery": "^3.7.1",
     "jsdom": "^24.0.0",
+    "lodash": "^4.17.21",
+    "lowdb": "^7.0.1",
     "moment": "^2.30.1",
-    "mwn": "^2.0.2"
+    "mwn": "^2.0.2",
+    "path": "^0.12.7",
+    "url": "^0.11.3"
   }
 }

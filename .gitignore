@@ -3,5 +3,6 @@
 .env
 compose.yaml
 Dockerfile
-node_modules/*
+db/*
 logs/*
+node_modules/*

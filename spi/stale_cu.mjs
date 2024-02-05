@@ -12,10 +12,10 @@ const isIP = ( s ) => {
 export default async ( bot, newReqs ) => {
   if ( !newReqs.length ) return;
   console.log( newReqs.map( r => r.name ) )
-  log( `發現新的CU請求：${ newReqs.map( r => r.name ) }` )
+  log( `[SPI] 發現新的CU請求：${ newReqs.map( r => r.name ) }` )
   // return;
   for ( var req of newReqs ) {
-    log( `分析新的CU請求：${ req.name }` )
+    log( `[SPI] 分析新的CU請求：${ req.name }` )
     let sockListTemplate = req.text.match( /\{\{sock[ _]list\|.*?\}\}/i )[0].split( /\|/g ).filter( m => !( /\{\{sock[ _]list|tools_link=/.test( m ) ) )
     let sockList = sockListTemplate.map( m => m.match( /^(?:\d+=)?(.*?)$/ )[1] )
     let qUsers = await bot.query( {
@@ -99,7 +99,7 @@ export default async ( bot, newReqs ) => {
       }
     } )
     console.log( newtext )
-    console.log( `已自動檢查 Wikipedia:傀儡調查/案件/${ req.name } 的CU請求` )
+    log( `[SPI] 已自動檢查 Wikipedia:傀儡調查/案件/${ req.name } 的CU請求` )
   }
   return;
 }

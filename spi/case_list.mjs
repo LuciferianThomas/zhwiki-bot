@@ -3,15 +3,20 @@ import moment from 'moment';
 
 import { CronJob } from 'cron';
 
-import { time, capitalize } from '../fn.mjs';
+import { time, capitalize, log } from '../fn.mjs';
 
 import staleCU from './stale_cu.mjs';
 
+/**
+ * 
+ * @param { Mwn } bot 
+ * @returns { Promise< string[] > }
+ */
 async function getClerkList( bot ) {
-  console.log( "正在獲取調查助理列表" )
+  log( "[SPI] 正在獲取調查助理列表" )
   let clerks = []
 
-  let SPIC = new bot.page( 'Wikipedia:傀儡調查/調查助理' )
+  let SPIC = new bot.Page( 'Wikipedia:傀儡調查/調查助理' )
   
   let lines = ( await SPIC.text() ).split( /\n/g )
   // console.log( lines ) 
@@ -27,11 +32,17 @@ async function getClerkList( bot ) {
     }
   }
   console.log( clerks )
+  log( `[SPI] 　　找到 ${ clerks.length } 名調查助理記錄` )
   return clerks
 }
 
+/**
+ * 
+ * @param { Mwn } bot 
+ * @returns { Promise< string[] > }
+ */
 async function getCUList( bot ) {
-  console.log( "正在獲取用戶查核員列表" )
+  log( "[SPI] 正在獲取用戶查核員列表" )
 
   let res = await bot.query( {
     list: "allusers",
@@ -39,13 +50,20 @@ async function getCUList( bot ) {
     aulimit: 100
   } )
 
+  /** @type { string[] } */
   let checkusers = res.query.allusers.length ? res.query.allusers.map(x => x.name) : []
   console.log( checkusers )
+  log( `[SPI] 　　找到 ${ checkusers.length } 名用戶查核員` )
   return checkusers
 }
 
+/**
+ * 
+ * @param { Mwn } bot 
+ * @returns { Promise< string[] > }
+ */
 async function getStewardList( bot ) {
-  console.log( "正在獲取監管員列表" )
+  log( "[SPI] 正在獲取監管員列表" )
 
   let res = await bot.query( {
     list: "globalallusers",
@@ -53,14 +71,16 @@ async function getStewardList( bot ) {
     agulimit: 100
   } )
 
+  /** @type { string[] } */
   let stewards = res.query.globalallusers.length ? res.query.globalallusers.map(x => x.name) : []
   console.log( stewards )
+  log( `[SPI] 　　找到 ${ stewards.length } 名監管員` )
   return stewards
 }
 
 /** @deprecated */
 async function getStatusFromCat( categories ) {
-  console.log( "正在獲取案件狀態" )
+  log( "[SPI] 正在獲取案件狀態" )
   const cat2status = {
     // 'SPI cases currently being checked': 'inprogress',
     '傀儡調查－等候進行查核': 'endorsed',
@@ -124,6 +144,11 @@ async function getStatusFromCat( categories ) {
   return result
 }
 
+/**
+ * 
+ * @param { string } wt 
+ * @returns string
+ */
 function getStatusFromTemplate( wt ) {
   let caseStatusTemplate = wt.match( /\{\{SPI[ _]case[ _]status ?\| ?(.*?) ?\}\}/ )
   if ( !caseStatusTemplate || !caseStatusTemplate[1] ) return "未能辨識狀態";
@@ -131,9 +156,11 @@ function getStatusFromTemplate( wt ) {
 }
 
 async function getCaseDetails( bot, title, clerks ) {
-  let page = new bot.page( `${ title }` )
-  console.log( `正在獲取 ${ title } 的案件資訊` )
+  let page = new bot.Page( `${ title }` )
+  log( `[SPI] 正在獲取 ${ title } 的案件資訊` )
   let wikitext = await page.text()
+
+  /** @type { { name: string, status: }[] } */
   let cases = [];
 
   try {
@@ -146,7 +173,7 @@ async function getCaseDetails( bot, title, clerks ) {
         text: case_wt
       }
   
-      console.log( "　　正在找出最後留言之用戶" )
+      log( "[SPI] 　　正在找出最後留言之用戶" )
   
       let p = /\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? (\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)/i
     
@@ -185,12 +212,17 @@ async function getCaseDetails( bot, title, clerks ) {
         _case.error = "NOSIG"
       }
     
-      console.log( `　　案件：${ _case.name }\n　　狀態：${ _case.status }\n　　登錄時間：${ !_case.file_time ? "ERROR" : time( _case.file_time ) }\n　　最後留言：${ _case.last_comment ? `${ _case.last_comment.user } 於 ${ time( _case.last_comment.timestamp ) }` : `無` }\n　　最後助理留言：${ _case.last_clerk ? `${ _case.last_clerk.user } 於 ${ time( _case.last_clerk.timestamp ) }` : `無` }` )
+      log(
+`[SPI] 　　案件：${ _case.name }
+      　　狀態：${ _case.status }
+      　　登錄時間：${ !_case.file_time ? "ERROR" : time( _case.file_time ) }
+      　　最後留言：${ _case.last_comment ? `${ _case.last_comment.user } 於 ${ time( _case.last_comment.timestamp ) }` : `無` }\n      　　最後助理留言：${ _case.last_clerk ? `${ _case.last_clerk.user } 於 ${ time( _case.last_clerk.timestamp ) }` : `無` }`
+      )
       cases.push( _case )
     }
   }
   catch ( err ) {
-    console.log( `在獲取 Wikipedia:傀儡調查/案件/${ title.split(/\//g)[2] } 的案件資訊時遇到錯誤` )
+    log( `[SPI] 在獲取 Wikipedia:傀儡調查/案件/${ title.split(/\//g)[2] } 的案件資訊時遇到錯誤` )
     cases.push( {
       name: title.split(/\//g)[2],
       status: "ERROR",
@@ -225,9 +257,12 @@ function sortCases( cases ) {
   } )
 }
 
+
 async function getAllCases( bot, clerks ) {
-  let cat = await bot.getPagesInCategory( 'Category:傀儡調查－進行中' )
+  log( `[SPI] 正在查詢進行中案件` )
+  let cat = await bot.getPagesInCategory( '傀儡調查－進行中' )
   console.log( cat )
+  log( `[SPI] 　　找到 ${ cat.length } 個進行中案件` )
   let cases = []
   for ( var page of cat ) {
     let page_cases = await getCaseDetails( bot, page, clerks )
@@ -271,6 +306,9 @@ function generateCaseTable( cases ) {
 
 let lastDone;
 
+/**
+ * @param { Mwn } bot
+ */
 export default async ( bot ) => {
   const TABLE_LOCATION = 'Wikipedia:傀儡調查/案件'
 
@@ -287,7 +325,7 @@ export default async ( bot ) => {
         && typeof _case.file_time != "string"
         && moment( _case.file_time ).isSameOrAfter( moment( lastDone ).startOf('minute') ) 
     } )
-    let list = new bot.page( TABLE_LOCATION )
+    let list = new bot.Page( TABLE_LOCATION )
     await list.edit( ( { content } ) => {
       return {
         text: generateCaseTable( cases ),
@@ -295,7 +333,7 @@ export default async ( bot ) => {
         bot: true
       }
     } )
-    console.log( `已完成更新SPI案件列表（${ cases.length }活躍提報）` )
+    log( `[SPI] 已完成更新SPI案件列表（${ cases.length }活躍提報）` )
     lastDone = new moment();
     await staleCU( bot, newCUreq );
     return;
