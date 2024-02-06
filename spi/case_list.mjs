@@ -260,7 +260,7 @@ function sortCases( cases ) {
 
 async function getAllCases( bot, clerks ) {
   log( `[SPI] 正在查詢進行中案件` )
-  let cat = await bot.getPagesInCategory( '傀儡調查－進行中' )
+  let cat = await bot.getPagesInCategory( '傀儡調查－進行中', { cmtype: 'page' } )
   console.log( cat )
   log( `[SPI] 　　找到 ${ cat.length } 個進行中案件` )
   let cases = []

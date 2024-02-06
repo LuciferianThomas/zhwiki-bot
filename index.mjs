@@ -5,6 +5,8 @@ import { time, log } from './fn.mjs';
 import genCaseList from './spi/case_list.mjs';
 import getStewardComments from './spi/steward_comment.mjs';
 
+import updateRfcList from './rfc/rfc_list.mjs';
+
 console.log( 'env', process.env )
 
 const bot = new Mwn( {
@@ -30,6 +32,13 @@ bot.login().then( async () => {
   
   try {
     getStewardComments( bot )
+  }
+  catch ( e ) {
+    log( `${ e }` )
+  }
+  
+  try {
+    updateRfcList( bot )
   }
   catch ( e ) {
     log( `${ e }` )

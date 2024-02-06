@@ -17,9 +17,9 @@ import crypto from 'node:crypto'
  */
 const getRfcs = async ( bot ) => {
   log( `[RFC] 正在查詢進行中討論` )
-  const rfcCat = new bot.getPagesInCategory( '維基百科請求評論' )
+  const cat = await bot.getPagesInCategory( '維基百科請求評論', { cmtype: 'page' } )
   console.log( cat )
-  log( `[RFC] 　　找到 ${ rfcCat.length } 個進行中討論` )
+  log( `[RFC] 　　找到 ${ cat.length } 個進行中討論` )
   let rfcs = []
   for ( var page of cat ) {
     let rfc = await getRfcDetails( bot, page )
@@ -44,11 +44,11 @@ const getRfcDetails = async ( bot, title ) => {
   try {
     const rgx = /(\{\{ ?rfc(?:[ _]subpage)?[^\}]+?)(\}\})((?:.|\n)+?\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)[^|\]\/#]+(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? (\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)\s*?(?:\n|$))/i
     const rgxg = new RegExp( rgx.source, rgx.flags + 'g' )
-    let rfcQs = wikitext.match( rgxg )
+    let rfcQs = wikitext.match( rgxg ) || []
     
     for ( const rfcQ of rfcQs ) {
       let p = /\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? (\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)/i
-      let signatures = ( wikitext.split(/==.+?==\n/g).find(x => rgx.test(x)).match( new RegExp( p.source, p.flags + "g" ) ) || [] ).map( sig => {
+      let signatures = ( wikitext.split(/==.+?==\n/g).find( x => rgx.test(x) ).match( new RegExp( p.source, p.flags + "g" ) ) || [] ).map( sig => {
         // console.log( sig.match( p ) )
         let [ _, user, year, month, day, hour, min ] = sig.match( p )
         // user = user.split(/\//g)[0]
@@ -59,16 +59,15 @@ const getRfcDetails = async ( bot, title ) => {
           timestamp: new Date( `${ year }-${ month }-${ day }T${ hour }:${ min }:00+00:00` )
         }
       } )
-      const last_comment = signatures.filter( sig => {
-        return !clerks.includes( sig.user )
-      } ).sort( ( a, b ) => {
+      console.log( signatures )
+      const last_comment = signatures.sort( ( a, b ) => {
         return b.timestamp - a.timestamp
       } )[0];
-      if ( moment(last_comment).diff(moment(), 'days') > 30 ) {
-        editPageSync( page, ( old_content, ts ) => {
+      if ( Math.abs( moment().diff(moment(last_comment.timestamp), 'days') ) > 30 ) {
+        editPageSync( page, ( { content: old_content } ) => {
           return { 
-            text: old_content.replace( rfcQ, `$3` ),
-            summary: `機械人測試（人工發動）：移除不活躍討論的RFC模板`
+            text: old_content.replace( rgx, `$3` ),
+            summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：移除不活躍討論的RFC模板`
           }
         }, `[RFC] 已移除 ${ title } 一則不活躍請求評論` )
         continue;
@@ -80,13 +79,15 @@ const getRfcDetails = async ( bot, title ) => {
       if ( !rfcId ) {
         rfcId = hash( `${ rfcQm[4] }${ rfcQm[5].length == 1 ? '0' : '' }${ rfcQm[5] }${ rfcQm[6].length == 1 ? '0' : '' }${ rfcQm[6] }${ rfcQm[7] }${ rfcQm[8] }${ title }` )
 
-        editPageSync( page, ( old_content, ts ) => {
+        editPageSync( page, ( { content: old_content } ) => {
+          console.log( old_content )
           return { 
-            text: old_content.replace( rfcQ, `$1|rfcid=${rfcId}$2$3` ),
-            summary: `機械人測試（人工發動）：更新RFC模板`
+            text: old_content.replace( rgx, `$1|rfcid=${rfcId}$2$3` ),
+            summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：更新RFC模板`
           }
         }, `[RFC] 已為 ${ title } 一則請求評論添加ID` )
       }
+      else rfcId = rfcId[1];
       rfcs.push( {
         page: title,
         cats: getCatsFromTemplate( rfcQ ),
@@ -97,6 +98,7 @@ const getRfcDetails = async ( bot, title ) => {
   }
   catch ( err ) {
     /** DO NOTHING for erratic talk pages */
+    log( `[RFC] 未能正常讀取該頁：` + err )
   }
   return rfcs;
 }
@@ -146,19 +148,19 @@ const editLists = async ( bot, rfcs ) => {
 
   for ( const rfcList of Object.keys( rfcLists ) ) {
     const relatedRfcs = rfcs.filter( rfc => rfc.cats.includes( rfcList ) )
-    let rfcListWt = `<noinclude>\n{{rfclistintro}}\n</noinclude>`
+    let rfcListWt = `<noinclude>\n{{rfclistintro}}\n</noinclude>\n`
     for ( const rfc of relatedRfcs ) {
       rfcListWt += `'''[[${ rfc.page }#rfc_${ rfc.id }|${ rfc.page }]]'''\n{{rfcquote|text=<nowiki/>\n${ rfc.lede }}}\n\n`
     }
     rfcListWt += `{{RFC list footer|${rfcList}|hide_instructions={{{hide_instructions}}} }}`
     let rfcListPage = new bot.Page( `${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }` )
-    await rfcListPage.edit( ( old_content, ts ) => {
+    await rfcListPage.edit( ( { content: old_content } ) => {
       return {
         text: rfcListWt,
-        summary: `機械人測試（人工發動）：更新RFC列表頁（${ relatedRfcs.length }個活躍討論）`
+        summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：更新RFC列表頁（${ relatedRfcs.length }個活躍討論）`
       }
     } )
-    log( `[RFC] 已更新 ${ rfcListPage.title }（${ relatedRfcs.length }個活躍討論）`)
+    log( `[RFC] 已更新 ${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }（${ relatedRfcs.length }個活躍討論）`)
   }
 
 }
@@ -173,7 +175,7 @@ export default async ( bot ) => {
     const rfcs = await getRfcs( bot )
     await editLists( bot, rfcs )
   }
-  // var job = new CronJob('0 5-59/10 * * * *', main, null, true);
-  // job.start();
+  var job = new CronJob('0 1-59/10 * * * *', main, null, true);
+  job.start();
   main();
 }

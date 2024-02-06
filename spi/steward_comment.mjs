@@ -131,7 +131,6 @@ export default async ( bot ) => {
     
     return;
   } catch (e) {
-    log( "[SPI] 　　發送監管員留言通知時出現錯誤：" )
-    log( e )
+    log( "[SPI] 　　發送監管員留言通知時出現錯誤：\n      　　" + e )
   }
 }
