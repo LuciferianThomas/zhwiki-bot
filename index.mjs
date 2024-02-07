@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import { Mwn } from 'mwn'
+import { CronJob } from 'cron';
+
 import { time, log } from './fn.mjs';
 import genCaseList from './spi/case_list.mjs';
 import getStewardComments from './spi/steward_comment.mjs';
@@ -23,24 +25,17 @@ const bot = new Mwn( {
 bot.login().then( async () => {
   console.log( "成功登入" )
   log( `成功登入` )
-  try {
-    genCaseList( bot )
+  const main = async () => {
+    try {
+      await genCaseList( bot )
+      await updateRfcList( bot )
+    }
+    catch ( e ) {
+      log( `[ERR] ${ e }` )
+    }
   }
-  catch ( e ) {
-    log( `${ e }` )
-  }
-  
-  try {
-    getStewardComments( bot )
-  }
-  catch ( e ) {
-    log( `${ e }` )
-  }
-  
-  try {
-    updateRfcList( bot )
-  }
-  catch ( e ) {
-    log( `${ e }` )
-  }
+  var job = new CronJob('0 */10 * * * *', main, null, true);
+  job.start();
+  await main()
+  await getStewardComments( bot )
 } )

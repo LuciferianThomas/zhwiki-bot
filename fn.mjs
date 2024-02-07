@@ -18,7 +18,7 @@ const $ = jquery( win, true )
 
 const log = ( message ) => {
   console.log( message )
-  fs.appendFile( './logs/debug.log', `${ time() } | ${ ( typeof message !== 'string' ? JSON.stringify( message ) : message ).replace( /\n/g, '\n' + ( ' '.repeat(19) ) ) }\n`, ( e ) => {
+  fs.appendFile( `./logs/debug-${ time( moment(), "YYYYMMDD" ) }.log`, `${ time() } | ${ ( typeof message !== 'string' ? JSON.stringify( message ) : message ).replace( /\n/g, '\n' + ( ' '.repeat(19) ) ) }\n`, ( e ) => {
     if ( e ) return;
   } )
 }

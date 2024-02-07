@@ -1,8 +1,6 @@
 import { Mwn } from 'mwn';
 import moment from 'moment';
 
-import { CronJob } from 'cron';
-
 import { time, capitalize, log } from '../fn.mjs';
 import { CDB, hash } from '../db.mjs'
 
@@ -170,12 +168,6 @@ const editLists = async ( bot, rfcs ) => {
  * @param { Mwn } bot 
  */
 export default async ( bot ) => {
-
-  const main = async () => {
-    const rfcs = await getRfcs( bot )
-    await editLists( bot, rfcs )
-  }
-  var job = new CronJob('0 1-59/10 * * * *', main, null, true);
-  job.start();
-  main();
+  const rfcs = await getRfcs( bot )
+  await editLists( bot, rfcs )
 }

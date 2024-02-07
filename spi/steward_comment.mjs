@@ -1,4 +1,5 @@
 import { Mwn } from 'mwn';
+import WikimediaStream from "wikimedia-streams";
 import moment from 'moment';
 
 import { time, capitalize, $, log } from '../fn.mjs';
@@ -45,27 +46,23 @@ function srcuStatus( status ) {
 
 const srcuPage = 'Steward requests/Checkuser' 
 
+/**
+ * @param { Mwn } bot
+ */
 export default async ( bot ) => {
   try {
     let stewards = await getStewards( bot )  
     
-    let stream = new bot.stream( "recentchange", {
-      onopen: () => { console.log( "EventSource online." ) },
-      onerror: ( err ) => { console.error( "EventSource:", err ) }
-    } );
+    let stream = new WikimediaStream( "recentchange" );
     
-    stream.addListener( ( data ) => {
-      // if (
-      //   data.wiki === 'metawiki'
-      //   && data.title === srcuPage
-      // ) console.log( data )
-      return (
+    stream.on( "recentchange", async ( data ) => {
+      const isWhatWeAreLookingFor =
         data.wiki === 'metawiki'
         && data.title === srcuPage
         && stewards.includes( data.user )
         && data.length.old < data.length.new
-      )
-    }, async ( data ) => {
+      if ( !isWhatWeAreLookingFor ) return;
+
       log( `[SPI] 有新的Steward回覆：${ data.user }` )
       let { compare } = await metabot.request({
         action: "compare",
@@ -127,10 +124,10 @@ export default async ( bot ) => {
       } )
       log( "[SPI] 　　完成發送監管員留言通知" )
       return;
-    } )
+      
     
-    return;
+    } )
   } catch (e) {
-    log( "[SPI] 　　發送監管員留言通知時出現錯誤：\n      　　" + e )
+    log( "[ERR] 發送監管員留言通知時出現錯誤：\n      　　" + e )
   }
 }
