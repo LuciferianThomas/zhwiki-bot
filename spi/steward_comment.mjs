@@ -1,5 +1,5 @@
-import { Mwn } from 'mwn';
-import WikimediaStream from "wikimedia-streams";
+import { Mwn } from 'mwn'
+import { WikimediaStream } from "wikimedia-streams";
 import moment from 'moment';
 
 import { time, capitalize, $, log } from '../fn.mjs';
@@ -7,25 +7,28 @@ import { time, capitalize, $, log } from '../fn.mjs';
 const metabot = new Mwn( {
   apiUrl: 'https://meta.wikimedia.org/w/api.php',
   userAgent: 'LuciferianBotSPI/1.0 (https://zh.wikipedia.org/wiki/Wikipedia:SPI)',
-
-  username: process.env.USERNAME,
-  password: process.env.BOTPASSWORD,
   
   defaultParams: { assert: 'user' }
 } )
 
+/**
+ * 
+ * @param { Mwn } bot 
+ * @returns { Promise< string[] > }
+ */
 async function getStewards( bot ) {
-  log( "正在獲取監管員列表" )
+  log( "[SPI] 正在獲取監管員列表" )
 
-  let res = await metabot.query( {
-    list: "allusers",
-    augroup: "steward",
-    aulimit: 100
+  let res = await bot.query( {
+    list: "globalallusers",
+    agugroup: "steward",
+    agulimit: 100
   } )
 
-  let stewards = res.query.allusers.length ? res.query.allusers.map(x => x.name) : []
-  // console.log( stewards )
-  // stewards.push( "LuciferianThomas" )
+  /** @type { string[] } */
+  let stewards = res.query.globalallusers.length ? res.query.globalallusers.map(x => x.name) : []
+  console.log( stewards )
+  log( `[SPI] 　　找到 ${ stewards.length } 名監管員` )
   return stewards
 }
 
@@ -44,6 +47,7 @@ function srcuStatus( status ) {
   }
 }
 
+// const srcuPage = 'User:LuciferianThomas/沙盒/3'
 const srcuPage = 'Steward requests/Checkuser' 
 
 /**
@@ -53,10 +57,12 @@ export default async ( bot ) => {
   try {
     let stewards = await getStewards( bot )  
     
-    let stream = new WikimediaStream( "recentchange" );
+    const stream = new WikimediaStream( "recentchange" );
     
     stream.on( "recentchange", async ( data ) => {
+      // console.log( data )
       const isWhatWeAreLookingFor =
+        // data.wiki === 'zhwiki'
         data.wiki === 'metawiki'
         && data.title === srcuPage
         && stewards.includes( data.user )
@@ -129,5 +135,6 @@ export default async ( bot ) => {
     } )
   } catch (e) {
     log( "[ERR] 發送監管員留言通知時出現錯誤：\n      　　" + e )
+    console.log( e )
   }
 }
