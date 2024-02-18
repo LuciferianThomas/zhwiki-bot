@@ -10,6 +10,11 @@ if ( !rfcData.get( 'active' ) ) rfcData.set( 'active', [] );
 import crypto from 'node:crypto'
 
 /**
+ * @typedef { { user: string, timestamp: Date, sigtext: string } } SigObj
+ * @typedef { { page: string, cats: string[], lede: string, id: string, lede_sig: SigObj, last: SigObj }[] } RfcArr
+ */
+
+/**
  * 
  * @param { Mwn } bot 
  */
@@ -30,14 +35,14 @@ const getRfcs = async ( bot ) => {
  * 
  * @param { Mwn } bot 
  * @param { string } title 
- * @returns { Promise< { page: string, cats: string[], lede: string, id: string }[] > }
+ * @returns { Promise< RfcArr > }
  */
 const getRfcDetails = async ( bot, title ) => {
   let page = new bot.Page( `${ title }` )
   log( `[RFC] 正在獲取 ${ title } 的討論記錄` )
   let wikitext = await page.text()
 
-  /** @type { { page: string, cats: string[], lede: string, id: string }[] } */
+  /** @type { RfcArr } */
   let rfcs = [];
   try {
     const rgx = /(\{\{ ?rfc(?:[ _]subpage)?[^\}]+?)(\}\})((?:.|\n)+?\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)[^|\]\/#]+(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? (\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)\s*?(?:\n|$))/i
@@ -45,19 +50,32 @@ const getRfcDetails = async ( bot, title ) => {
     let rfcQs = wikitext.match( rgxg ) || []
     
     for ( const rfcQ of rfcQs ) {
-      let p = /\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? (\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)/i
-      let signatures = ( wikitext.split(/==.+?==\n/g).find( x => rgx.test(x) ).match( new RegExp( p.source, p.flags + "g" ) ) || [] ).map( sig => {
+      const lede = rfcQ.replace( rgx, "$3" ).trim()
+
+      let p = /\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? ((\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\))/i
+      let signatures = ( wikitext.split(/(^|\n)==[^=].+?[^=]==\n/g).find( x => rgx.test(x) ).match( new RegExp( p.source, p.flags + "g" ) ) || [] ).map( sig => {
         // console.log( sig.match( p ) )
-        let [ _, user, year, month, day, hour, min ] = sig.match( p )
+        let [ _, user, full, year, month, day, hour, min ] = sig.match( p )
         // user = user.split(/\//g)[0]
         if ( month.length == 1 ) month = "0" + month
         if (   day.length == 1 )   day = "0" + day
         return {
           user: capitalize( user ),
-          timestamp: new Date( `${ year }-${ month }-${ day }T${ hour }:${ min }:00+00:00` )
+          timestamp: new Date( `${ year }-${ month }-${ day }T${ hour }:${ min }:00+00:00` ),
+          sigtext: full,
         }
       } )
       console.log( signatures )
+      const lede_sig = ( () => {
+        let [ _, user, full, year, month, day, hour, min ] = lede.match( p )
+        if ( month.length == 1 ) month = "0" + month
+        if (   day.length == 1 )   day = "0" + day
+        return {
+          user: capitalize( user ),
+          timestamp: new Date( `${ year }-${ month }-${ day }T${ hour }:${ min }:00+00:00` ),
+          sigtext: full,
+        }
+      } )()
       const last_comment = signatures.sort( ( a, b ) => {
         return b.timestamp - a.timestamp
       } )[0];
@@ -72,7 +90,7 @@ const getRfcDetails = async ( bot, title ) => {
       }
 
 
-      let rfcId = rfcQ.match( /\{\{ ?rfc(?:[ _]subpage)?[^\}]+rfcid *?= *?([^ ]+)[^\}]*\}\}/i )
+      let rfcId = rfcQ.match( /\{\{ ?rfc(?:[ _]subpage)?[^\}]+rfcid *?= *?([^ }]+)[^\}]*\}\}/i )
       let rfcQm = rfcQ.match( rgx )
       if ( !rfcId ) {
         rfcId = hash( `${ rfcQm[4] }${ rfcQm[5].length == 1 ? '0' : '' }${ rfcQm[5] }${ rfcQm[6].length == 1 ? '0' : '' }${ rfcQm[6] }${ rfcQm[7] }${ rfcQm[8] }${ title }` )
@@ -89,8 +107,10 @@ const getRfcDetails = async ( bot, title ) => {
       rfcs.push( {
         page: title,
         cats: getCatsFromTemplate( rfcQ ),
-        lede: rfcQ.replace( rgx, "$3" ).trim(),
-        id  : rfcId
+        lede,
+        id  : rfcId,
+        last: last_comment,
+        lede_sig
       } )
     }
   }
@@ -122,7 +142,7 @@ const editPageSync = async ( page, transform, message ) => {
 /**
  * 
  * @param { Mwn } bot 
- * @param { { page: string, cats: string[], lede: string, id: string }[] } rfcs
+ * @param { RfcArr } rfcs
  */
 const editLists = async ( bot, rfcs ) => {
   const RFC_LISTS_ROOT = 'Wikipedia:請求評論/'
@@ -145,7 +165,7 @@ const editLists = async ( bot, rfcs ) => {
   }
 
   for ( const rfcList of Object.keys( rfcLists ) ) {
-    const relatedRfcs = rfcs.filter( rfc => rfc.cats.includes( rfcList ) )
+    const relatedRfcs = rfcs.filter( rfc => rfc.cats.includes( rfcList ) || ( rfcList == 'unsorted' && rfc.cats.filter( cat => Object.keys( rfcLists ).includes( cat ) ).length == 0 ) ).sort( ( a, b ) => a.lede_sig.timestamp - b.lede_sig.timestamp )
     let rfcListWt = `<noinclude>\n{{rfclistintro}}\n</noinclude>\n`
     for ( const rfc of relatedRfcs ) {
       rfcListWt += `'''[[${ rfc.page }#rfc_${ rfc.id }|${ rfc.page }]]'''\n{{rfcquote|text=<nowiki/>\n${ rfc.lede }}}\n\n`
