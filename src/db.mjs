@@ -7,7 +7,7 @@ import { JSONFileSync } from "lowdb/node";
 import { default as lodash } from 'lodash';
 
 const __dirname = path.dirname( url.fileURLToPath( import.meta.url ) );
-const file = path.join(__dirname, "db", "db.json");
+const file = path.join(__dirname, "..", "db", "db.json");
 const adapter = new JSONFileSync( file )
 const lowdb = new LowSync( adapter, {} )
 

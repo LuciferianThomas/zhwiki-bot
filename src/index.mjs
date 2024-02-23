@@ -7,7 +7,8 @@ import { time, log } from './fn.mjs';
 import genCaseList from './spi/case_list.mjs';
 import getStewardComments from './spi/steward_comment.mjs';
 
-import updateRfcList from './rfc/rfc_list.mjs';
+import updateRfcList from './rfc/update.mjs';
+import sendFrs from './frs/send.mjs';
 
 console.log( 'env', process.env )
 
@@ -29,6 +30,7 @@ bot.login().then( async () => {
     try {
       await genCaseList( bot )
       await updateRfcList( bot )
+      await sendFrs( bot )
     }
     catch ( e ) {
       log( `[ERR] ${ e }` )
