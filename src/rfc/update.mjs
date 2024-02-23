@@ -4,15 +4,37 @@ import moment from 'moment';
 import { time, capitalize, log } from '../fn.mjs';
 import { CDB, hash } from '../db.mjs'
 
-const rfcData = new CDB( 'RFC' )
-if ( !rfcData.get( 'active' ) ) rfcData.set( 'active', [] );
+// const rfcData = new CDB( 'RFC' )
+// if ( !rfcData.get( 'active' ) ) rfcData.set( 'active', [] );
 
 import crypto from 'node:crypto'
 
+import sendFrs from '../frs/send.mjs'
+
 /**
  * @typedef { { user: string, timestamp: Date, sigtext: string } } SigObj
- * @typedef { { page: string, cats: string[], lede: string, id: string, lede_sig: SigObj, last: SigObj }[] } RfcArr
+ * @typedef { { page: string, cats: string[], lede: string, id: string, lede_sig: SigObj, last: SigObj, frs: boolean } } RfcObj
+ * @typedef { RfcObj[] } RfcArr
  */
+
+
+const rfcLists = {
+  bio: '傳記',
+  econ: '經濟、貿易與公司',
+  hist: '歷史與地理',
+  lang: '語言及語言學',
+  sci: '數學、科學與科技',
+  media: '媒體、藝術與建築',
+  pol: '政治、政府與法律',
+  reli: '宗教與哲學',
+  soc: '社會、體育運動與文化',
+  style: '維基百科格式與命名',
+  policy: '維基百科方針與指引',
+  proj: '維基專題與協作',
+  tech: '維基百科技術議題與模板',
+  prop: '維基百科提議',
+  unsorted: '未分類'
+}
 
 /**
  * 
@@ -21,7 +43,7 @@ import crypto from 'node:crypto'
 const getRfcs = async ( bot ) => {
   log( `[RFC] 正在查詢進行中討論` )
   const cat = await bot.getPagesInCategory( '維基百科請求評論', { cmtype: 'page' } )
-  console.log( cat )
+  // console.log( cat )
   log( `[RFC] 　　找到 ${ cat.length } 個進行中討論` )
   let rfcs = []
   for ( var page of cat ) {
@@ -45,7 +67,7 @@ const getRfcDetails = async ( bot, title ) => {
   /** @type { RfcArr } */
   let rfcs = [];
   try {
-    const rgx = /(\{\{ ?rfc(?:[ _]subpage)?[^\}]+?)(\}\})((?:.|\n)+?\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)[^|\]\/#]+(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? (\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)\s*?(?:\n|$))/i
+    const rgx = /(\{\{ ?rfc(?:[ _]subpage)?[^\}]*?)(\}\})((?:.|\n)+?\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)[^|\]\/#]+(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? (\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)\s*?(?:\n|$))/i
     const rgxg = new RegExp( rgx.source, rgx.flags + 'g' )
     let rfcQs = wikitext.match( rgxg ) || []
     
@@ -65,7 +87,7 @@ const getRfcDetails = async ( bot, title ) => {
           sigtext: full,
         }
       } )
-      console.log( signatures )
+      // console.log( signatures )
       const lede_sig = ( () => {
         let [ _, user, full, year, month, day, hour, min ] = lede.match( p )
         if ( month.length == 1 ) month = "0" + month
@@ -92,6 +114,9 @@ const getRfcDetails = async ( bot, title ) => {
 
       let rfcId = rfcQ.match( /\{\{ ?rfc(?:[ _]subpage)?[^\}]+rfcid *?= *?([^ }]+)[^\}]*\}\}/i )
       let rfcQm = rfcQ.match( rgx )
+
+      let frs = title.endsWith( '沙盒' ) ? true : false;
+
       if ( !rfcId ) {
         rfcId = hash( `${ rfcQm[4] }${ rfcQm[5].length == 1 ? '0' : '' }${ rfcQm[5] }${ rfcQm[6].length == 1 ? '0' : '' }${ rfcQm[6] }${ rfcQm[7] }${ rfcQm[8] }${ title }` )
 
@@ -111,15 +136,19 @@ const getRfcDetails = async ( bot, title ) => {
             summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：更新RFC模板`
           }
         }, `[RFC] 已為 ${ title } 一則請求評論添加ID` )
+        frs = true;
       }
       else rfcId = rfcId[1];
+      const cats = getCatsFromTemplate( rfcQ );
+      log( `[RFC] 此討論屬於：${ cats }` )
       rfcs.push( {
         page: title,
-        cats: getCatsFromTemplate( rfcQ ),
+        cats,
         lede,
         id  : rfcId,
         last: last_comment,
-        lede_sig
+        lede_sig,
+        frs
       } )
     }
   }
@@ -134,7 +163,12 @@ const getRfcDetails = async ( bot, title ) => {
 const getCatsFromTemplate = ( wt ) => {
   let rfcTemplate = wt.match( /\{\{ ?rfc(?:[ _]subpage)? ?\| ?(.+?)\}\}/i )
   if ( !rfcTemplate || !rfcTemplate[1] ) return "未能辨識狀態";
-  else return rfcTemplate[1].split( /\|/g ).map( x => x.trim() );
+  else {
+    const cats = rfcTemplate[1].split( /\|/g ).map( x => x.trim() );
+    const valcats = cats.filter( cat => Object.keys( rfcLists ).includes( cat ) );
+    if ( !valcats || !valcats.length ) return [ 'unsorted' ];
+    else return valcats;
+  }
 }
 
 /**
@@ -155,32 +189,20 @@ const editPageSync = async ( page, transform, message ) => {
  */
 const editLists = async ( bot, rfcs ) => {
   const RFC_LISTS_ROOT = 'Wikipedia:請求評論/'
-  const rfcLists = {
-    bio: '傳記',
-    econ: '經濟、貿易與公司',
-    hist: '歷史與地理',
-    lang: '語言及語言學',
-    sci: '數學、科學與科技',
-    media: '媒體、藝術與建築',
-    pol: '政治、政府與法律',
-    reli: '宗教與哲學',
-    soc: '社會、體育運動與文化',
-    style: '維基百科格式與命名',
-    policy: '維基百科方針與指引',
-    proj: '維基專題與協作',
-    tech: '維基百科技術議題與模板',
-    prop: '維基百科提議',
-    unsorted: '未分類'
-  }
 
   for ( const rfcList of Object.keys( rfcLists ) ) {
-    const relatedRfcs = rfcs.filter( rfc => rfc.cats.includes( rfcList ) || ( rfcList == 'unsorted' && rfc.cats.filter( cat => Object.keys( rfcLists ).includes( cat ) ).length == 0 ) ).sort( ( a, b ) => a.lede_sig.timestamp - b.lede_sig.timestamp )
+    const relatedRfcs = rfcs.filter( rfc => rfc.cats.includes( rfcList ) ).sort( ( a, b ) => a.lede_sig.timestamp - b.lede_sig.timestamp )
     let rfcListWt = `<noinclude>\n{{rfclistintro}}\n</noinclude>\n`
     for ( const rfc of relatedRfcs ) {
       rfcListWt += `'''[[${ rfc.page }#rfc_${ rfc.id }|${ rfc.page }]]'''\n{{rfcquote|text=<nowiki/>\n${ rfc.lede }}}\n\n`
     }
     rfcListWt += `{{RFC list footer|${rfcList}|hide_instructions={{{hide_instructions}}} }}`
     let rfcListPage = new bot.Page( `${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }` )
+    const oldText = await rfcListPage.text();
+    if ( oldText == rfcListWt ) {
+      log( `[RFC] ${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }無需更新（${ relatedRfcs.length }個活躍討論）` )
+      continue;
+    }
     await rfcListPage.edit( ( { content: old_content } ) => {
       return {
         text: rfcListWt,
@@ -189,7 +211,7 @@ const editLists = async ( bot, rfcs ) => {
     } )
     log( `[RFC] 已更新 ${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }（${ relatedRfcs.length }個活躍討論）`)
   }
-
+  return;
 }
 
 /**
@@ -199,4 +221,9 @@ const editLists = async ( bot, rfcs ) => {
 export default async ( bot ) => {
   const rfcs = await getRfcs( bot )
   await editLists( bot, rfcs )
+  log( `[RFC] 已完成更新所有RFC列表頁` )
+  const rfc2frs = rfcs.filter( rfc => rfc.frs )
+  for ( const rfc of rfc2frs ) {
+    await sendFrs( bot, rfc )
+  }
 }

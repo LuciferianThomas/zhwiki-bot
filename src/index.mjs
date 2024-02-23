@@ -3,7 +3,7 @@ dotenv.config();
 import { Mwn } from 'mwn'
 import { CronJob } from 'cron';
 
-import { time, log } from './fn.mjs';
+import { time, log, pruneLogs } from './fn.mjs';
 import genCaseList from './spi/case_list.mjs';
 import getStewardComments from './spi/steward_comment.mjs';
 
@@ -30,7 +30,7 @@ bot.login().then( async () => {
     try {
       await genCaseList( bot )
       await updateRfcList( bot )
-      await sendFrs( bot )
+      // await sendFrs( bot )
     }
     catch ( e ) {
       log( `[ERR] ${ e }` )
@@ -40,4 +40,6 @@ bot.login().then( async () => {
   job.start();
   await main()
   await getStewardComments( bot )
+
+  new CronJob( '0 0 0 * * *', () => { pruneLogs() }, null, true, null, null, true ).start()
 } )
