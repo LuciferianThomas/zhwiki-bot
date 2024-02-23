@@ -96,9 +96,18 @@ const getRfcDetails = async ( bot, title ) => {
         rfcId = hash( `${ rfcQm[4] }${ rfcQm[5].length == 1 ? '0' : '' }${ rfcQm[5] }${ rfcQm[6].length == 1 ? '0' : '' }${ rfcQm[6] }${ rfcQm[7] }${ rfcQm[8] }${ title }` )
 
         editPageSync( page, ( { content: old_content } ) => {
-          console.log( old_content )
+          // console.log( old_content )
+          let section = old_content.split(/(^|\n)==[^=].+?[^=]==\n/g)
+            .find( s => {
+              let m = s.match( rgx )
+              if ( !m ) return false;
+              let t = m[1]
+              if ( !/rfcid/.test( t ) ) return true;
+              else return false;
+            } )
+          let new_section = section.replace( rgx, `$1|rfcid=${rfcId}$2$3` )
           return { 
-            text: old_content.replace( rgx, `$1|rfcid=${rfcId}$2$3` ),
+            text: old_content.replace( section, new_section ),
             summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：更新RFC模板`
           }
         }, `[RFC] 已為 ${ title } 一則請求評論添加ID` )
