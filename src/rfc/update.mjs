@@ -4,8 +4,7 @@ import moment from 'moment';
 import { time, capitalize, log } from '../fn.mjs';
 import { CDB, hash } from '../db.mjs'
 
-// const rfcData = new CDB( 'RFC' )
-// if ( !rfcData.get( 'active' ) ) rfcData.set( 'active', [] );
+const rfcData = new CDB( 'RFC' )
 
 import crypto from 'node:crypto'
 
@@ -13,7 +12,7 @@ import sendFrs from '../frs/send.mjs'
 
 /**
  * @typedef { { user: string, timestamp: Date, sigtext: string } } SigObj
- * @typedef { { page: string, cats: string[], lede: string, id: string, lede_sig: SigObj, last: SigObj, frs: boolean } } RfcObj
+ * @typedef { { page: string, section: string, cats: string[], lede: string, id: string, lede_sig: SigObj, last: SigObj, frs: boolean } } RfcObj
  * @typedef { RfcObj[] } RfcArr
  */
 
@@ -42,7 +41,7 @@ const rfcLists = {
  */
 const getRfcs = async ( bot ) => {
   log( `[RFC] 正在查詢進行中討論` )
-  const cat = await bot.getPagesInCategory( '維基百科請求評論', { cmtype: 'page' } )
+  const cat = await bot.getPagesInCategory( '維基百科徵求意見', { cmtype: 'page' } )
   // console.log( cat )
   log( `[RFC] 　　找到 ${ cat.length } 個進行中討論` )
   let rfcs = []
@@ -107,7 +106,7 @@ const getRfcDetails = async ( bot, title ) => {
             text: old_content.replace( rgx, `$3` ),
             summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：移除不活躍討論的RFC模板`
           }
-        }, `[RFC] 已移除 ${ title } 一則不活躍請求評論` )
+        }, `[RFC] 已移除 ${ title } 一則不活躍徵求意見` )
         continue;
       }
 
@@ -120,7 +119,7 @@ const getRfcDetails = async ( bot, title ) => {
       if ( !rfcId ) {
         rfcId = hash( `${ rfcQm[4] }${ rfcQm[5].length == 1 ? '0' : '' }${ rfcQm[5] }${ rfcQm[6].length == 1 ? '0' : '' }${ rfcQm[6] }${ rfcQm[7] }${ rfcQm[8] }${ title }` )
 
-        editPageSync( page, ( { content: old_content } ) => {
+        await editPage( page, ( { content: old_content } ) => {
           // console.log( old_content )
           let section = old_content.split(/(^|\n)==[^=].+?[^=]==\n/g)
             .find( s => {
@@ -135,14 +134,23 @@ const getRfcDetails = async ( bot, title ) => {
             text: old_content.replace( section, new_section ),
             summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：更新RFC模板`
           }
-        }, `[RFC] 已為 ${ title } 一則請求評論添加ID` )
+        }, `[RFC] 已為 ${ title } 一則徵求意見添加ID` )
         frs = true;
       }
       else rfcId = rfcId[1];
+
+      wikitext = await page.text()
+      const _c = wikitext.split( /(?:(?:^|\n)==(?!=)([^\n]+)==(?!=)\n)/ );
+      const _i = _c.findIndex( _ => _.includes( `rfcid=${rfcId}` ) );
+      // console.log( _c, _i, _c[ _i ], _c[ _i - 1 ] )
+      const section = _c[ _i - 1 ].replace( /\[\[(?:[^\|\]]+\|)?([^\]]+)\]\]/g, "$1" ).trim();
+      log( `[RFC] 　　討論標題：${ section }` )
+
       const cats = getCatsFromTemplate( rfcQ );
-      log( `[RFC] 此討論屬於：${ cats }` )
+      log( `[RFC] 　　分類：${ cats }` )
       rfcs.push( {
         page: title,
+        section,
         cats,
         lede,
         id  : rfcId,
@@ -155,6 +163,7 @@ const getRfcDetails = async ( bot, title ) => {
   catch ( err ) {
     /** DO NOTHING for erratic talk pages */
     log( `[RFC] 未能正常讀取該頁：` + err )
+    console.error( err )
   }
   return rfcs;
 }
@@ -177,7 +186,7 @@ const getCatsFromTemplate = ( wt ) => {
  * @param { import('mwn').EditTransform } transform 
  * @param { * } message
  */
-const editPageSync = async ( page, transform, message ) => {
+const editPage = async ( page, transform, message ) => {
   await page.edit( transform )
   log( message )
 }
@@ -188,13 +197,14 @@ const editPageSync = async ( page, transform, message ) => {
  * @param { RfcArr } rfcs
  */
 const editLists = async ( bot, rfcs ) => {
-  const RFC_LISTS_ROOT = 'Wikipedia:請求評論/'
+  const RFC_LISTS_ROOT = 'Wikipedia:徵求意見/'
 
   for ( const rfcList of Object.keys( rfcLists ) ) {
     const relatedRfcs = rfcs.filter( rfc => rfc.cats.includes( rfcList ) ).sort( ( a, b ) => a.lede_sig.timestamp - b.lede_sig.timestamp )
     let rfcListWt = `<noinclude>\n{{rfclistintro}}\n</noinclude>\n`
+    if ( !relatedRfcs.length ) rfcListWt += "目前此主題無正在討論的議題"
     for ( const rfc of relatedRfcs ) {
-      rfcListWt += `'''[[${ rfc.page }#rfc_${ rfc.id }|${ rfc.page }]]'''\n{{rfcquote|text=<nowiki/>\n${ rfc.lede }}}\n\n`
+      rfcListWt += `[[${ rfc.page }#rfc_${ rfc.id }|${ rfc.page } § <strong style="font-size:115%;">${ rfc.section }</strong>]]\n{{rfcquote|text=<nowiki/>\n${ rfc.lede }}}\n`
     }
     rfcListWt += `{{RFC list footer|${rfcList}|hide_instructions={{{hide_instructions}}} }}`
     let rfcListPage = new bot.Page( `${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }` )
@@ -219,11 +229,14 @@ const editLists = async ( bot, rfcs ) => {
  * @param { Mwn } bot 
  */
 export default async ( bot ) => {
+  rfcData.set( "working", true )
   const rfcs = await getRfcs( bot )
   await editLists( bot, rfcs )
   log( `[RFC] 已完成更新所有RFC列表頁` )
   const rfc2frs = rfcs.filter( rfc => rfc.frs )
+  console.log( rfc2frs )
   for ( const rfc of rfc2frs ) {
     await sendFrs( bot, rfc )
   }
+  rfcData.set( "working", false )
 }

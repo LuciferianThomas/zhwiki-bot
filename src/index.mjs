@@ -10,7 +10,10 @@ import getStewardComments from './spi/steward_comment.mjs';
 import updateRfcList from './rfc/update.mjs';
 import sendFrs from './frs/send.mjs';
 
-console.log( 'env', process.env )
+import { CDB } from './db.mjs'
+const rfcData = new CDB( 'RFC' )
+
+// console.log( 'env', process.env )
 
 const bot = new Mwn( {
   apiUrl: 'https://zh.wikipedia.org/w/api.php',
@@ -29,11 +32,11 @@ bot.login().then( async () => {
   const main = async () => {
     try {
       await genCaseList( bot )
-      await updateRfcList( bot )
-      // await sendFrs( bot )
+      if ( !rfcData.get( "working" ) ) await updateRfcList( bot )
     }
     catch ( e ) {
       log( `[ERR] ${ e }` )
+      console.error( e )
     }
   }
   var job = new CronJob('0 */10 * * * *', main, null, true);

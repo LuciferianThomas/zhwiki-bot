@@ -19,7 +19,7 @@ async function getClerkList( bot ) {
   let lines = ( await SPIC.text() ).split( /\n/g )
   // console.log( lines ) 
   let aCS = lines.indexOf( lines.find( x => /活躍調查助理/.test( x ) ) )   // active clerk section index
-    , iCS = lines.indexOf( lines.find( x => /不活躍調查助理/.test( x ) ) ) // inactive clerk section index
+    , iCS = lines.indexOf( lines.find( x => /調查助理的職責/.test( x ) ) ) // inactive clerk section index
 
   let p = /\{\{\/ClerkUser\|([^}]+)}}/
 
