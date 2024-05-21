@@ -72,7 +72,7 @@ export default async ( bot, newReqs ) => {
     console.log( stale )
     // console.
 
-    out = "{| class=wikitable\n! style=\"width:12em;padding-left:1.3em\" | 問題 !! 帳號\n"
+    let out = "{| class=wikitable\n! style=\"width:12em;padding-left:1.3em\" | 問題 !! 帳號\n"
     // if ( invalid.length ) {
     //   out += `|-\n| 不能查核IP帳號間或其與註冊帳號的關聯 || ${ invalid.map( n => `{{unping|${n}}}` ).join( "、" ) }\n`
     // }

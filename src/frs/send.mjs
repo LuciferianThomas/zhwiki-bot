@@ -26,8 +26,9 @@ const getList = async ( bot ) => {
   const lines = text.split( /\n/g )
   const list = {}
   
-  const sectionRgx = /===<!--rfc:(.+?)-->.+?===/
+  const sectionRgx = /=== ?<!--rfc:(.+?)-->.+? ?===/
   const sections = lines.filter( line => sectionRgx.test( line ) ).map( line => lines.indexOf( line ) )
+  console.log( sections )
   for ( let i = 0; i < sections.length; i++ ) {
     const sect = lines[ sections[ i ] ].match( sectionRgx )[1];
     const slist = list[ sect ] = {};
@@ -103,7 +104,7 @@ const getArbitraryUsers = ( rfc, subsc, list, lim ) => {
     const notOnSingleList =
       Object.keys( subsc.all ).includes( selected )
       && ( !Object.keys( subsc[ list ] ).includes( selected )
-      || records[ selected ].length >= subsc[ list ][ selected ] );
+      || ( records[ selected ]?.length ?? 0 ) >= subsc[ list ][ selected ] );
 
     let selRec = ( notOnSingleList ? subAll : records )[ selected ];
     if ( !selRec ) selRec = ( notOnSingleList ? subAll : records )[ selected ] = [];
@@ -175,7 +176,8 @@ const sendToList = async ( bot, rfc, list, sendlist ) => {
       await u.talkpage.newSection(
         `討論邀請：就${ rfcLists[ list ] }主題討論徵求意見`,
         `{{subst:FRS notification|title1=${ rfc.page }|header1=${ rfc.section }|type1=${ rfcLists[ list ] }|rfcid1=${ rfc.id }}}\n--{{subst:User:LuciferianBot/SPIsign}} ~~~~~`,
-        { summary: `[[Wikipedia:机器人/申请/LuciferianBot/6|機械人（測試）]]：發送[[WP:FRS]]討論邀請` }
+        { summary: `[[Wikipedia:机器人/申请/LuciferianBot/6|機械人（測試）]]：發送[[WP:FRS]]討論邀請`,
+          sectiontitle: `討論邀請：就${ rfcLists[ list ] }主題討論徵求意見` }
       )
       log( `[FRS] 已發送訊息給 User talk:${ user }` )
     }
@@ -195,10 +197,11 @@ export default async ( bot, rfc ) => {
   log( `[FRS] 為 ${ rfc.page } 的RFC發送FRS通告` )
   
   const subsc = await getList( bot )
+  console.log( subsc )
   for ( const list of rfc.cats ) {
     const sendlist = getArbitraryUsers( rfc, subsc, list )
     console.log( sendlist )
-    // await sendToList( bot, rfc, list, sendlist )
+    await sendToList( bot, rfc, list, sendlist )
   }
   frsRecord.set( rfc.id, undefined )
 }

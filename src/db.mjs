@@ -69,7 +69,7 @@ export class CDB {
    * @returns { any }
    */
   all() {
-    return lowdb.data[ this.#table ];
+    return lodash.cloneDeep( lowdb.data[ this.#table ] );
   }
 };
 

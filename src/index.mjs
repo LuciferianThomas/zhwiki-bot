@@ -1,7 +1,6 @@
-import dotenv from 'dotenv';
-dotenv.config();
 import { Mwn } from 'mwn'
 import { CronJob } from 'cron';
+import moment from 'moment';
 
 import { time, log, pruneLogs } from './fn.mjs';
 import genCaseList from './spi/case_list.mjs';
@@ -29,18 +28,30 @@ const bot = new Mwn( {
 bot.login().then( async () => {
   console.log( "成功登入" )
   log( `成功登入` )
+  rfcData.set( "working", false )
   const main = async () => {
     try {
       await genCaseList( bot )
-      if ( !rfcData.get( "working" ) ) await updateRfcList( bot )
     }
     catch ( e ) {
-      log( `[ERR] ${ e }` )
+      log( `[SPI] [ERR] ${ e }` )
       console.error( e )
+    }
+    try {
+      let lu = rfcData.get( "working" )
+      if ( moment( lu ).add( 10, 'minutes' ) < moment() )
+        rfcData.set( ( lu = false ) )
+      if ( !lu ) await updateRfcList( bot )
+    }
+    catch ( e ) {
+      log( `[RFC] [ERR] ${ e }` )
+      console.error( e )
+      rfcData.set( "working", false )
     }
   }
   var job = new CronJob('0 */10 * * * *', main, null, true);
   job.start();
+  rfcData.set( "working", false )
   await main()
   await getStewardComments( bot )
 

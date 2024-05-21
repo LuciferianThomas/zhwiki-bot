@@ -11,6 +11,17 @@ import crypto from 'node:crypto'
 import sendFrs from '../frs/send.mjs'
 
 /**
+ * 
+ * @param { import('mwn').MwnPage } page 
+ * @param { import('mwn').EditTransform } transform 
+ * @param { * } message
+ */
+const editPage = async ( page, transform, message ) => {
+  await page.edit( transform )
+  log( message )
+}
+
+/**
  * @typedef { { user: string, timestamp: Date, sigtext: string } } SigObj
  * @typedef { { page: string, section: string, cats: string[], lede: string, id: string, lede_sig: SigObj, last: SigObj, frs: boolean } } RfcObj
  * @typedef { RfcObj[] } RfcArr
@@ -101,7 +112,7 @@ const getRfcDetails = async ( bot, title ) => {
         return b.timestamp - a.timestamp
       } )[0];
       if ( Math.abs( moment().diff(moment(last_comment.timestamp), 'days') ) > 30 ) {
-        editPageSync( page, ( { content: old_content } ) => {
+        editPage( page, ( { content: old_content } ) => {
           return { 
             text: old_content.replace( rgx, `$3` ),
             summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：移除不活躍討論的RFC模板`
@@ -142,8 +153,8 @@ const getRfcDetails = async ( bot, title ) => {
       wikitext = await page.text()
       const _c = wikitext.split( /(?:(?:^|\n)==(?!=)([^\n]+)==(?!=)\n)/ );
       const _i = _c.findIndex( _ => _.includes( `rfcid=${rfcId}` ) );
-      // console.log( _c, _i, _c[ _i ], _c[ _i - 1 ] )
-      const section = _c[ _i - 1 ].replace( /\[\[(?:[^\|\]]+\|)?([^\]]+)\]\]/g, "$1" ).trim();
+      console.log( _c, _i, _c[ _i ], _c[ _i - 1 ] )
+      const section = _c[ _i - 1 ].replace( /\[\[(?:[^\|\]]+\||:)?([^\]]+)\]\]/g, "$1" ).trim();
       log( `[RFC] 　　討論標題：${ section }` )
 
       const cats = getCatsFromTemplate( rfcQ );
@@ -178,17 +189,6 @@ const getCatsFromTemplate = ( wt ) => {
     if ( !valcats || !valcats.length ) return [ 'unsorted' ];
     else return valcats;
   }
-}
-
-/**
- * 
- * @param { import('mwn').MwnPage } page 
- * @param { import('mwn').EditTransform } transform 
- * @param { * } message
- */
-const editPage = async ( page, transform, message ) => {
-  await page.edit( transform )
-  log( message )
 }
 
 /**
@@ -229,7 +229,7 @@ const editLists = async ( bot, rfcs ) => {
  * @param { Mwn } bot 
  */
 export default async ( bot ) => {
-  rfcData.set( "working", true )
+  rfcData.set( "working", moment().toISOString() )
   const rfcs = await getRfcs( bot )
   await editLists( bot, rfcs )
   log( `[RFC] 已完成更新所有RFC列表頁` )
