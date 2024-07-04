@@ -6,3 +6,4 @@ Dockerfile
 db/*
 logs/*
 node_modules/*
+src/test.mjs

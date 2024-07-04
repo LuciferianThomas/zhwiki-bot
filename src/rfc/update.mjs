@@ -1,5 +1,11 @@
 import { Mwn } from 'mwn';
 import moment from 'moment';
+import { convert as html2Text } from 'html-to-text';
+
+/**
+ * @typedef { import('mwn/build/wikitext').Section  } Section
+ * @typedef { import('mwn/build/wikitext').Template } Template
+ */
 
 import { time, capitalize, log } from '../fn.mjs';
 import { CDB, hash } from '../db.mjs'
@@ -57,10 +63,61 @@ const getRfcs = async ( bot ) => {
   log( `[RFC] 　　找到 ${ cat.length } 個進行中討論` )
   let rfcs = []
   for ( var page of cat ) {
+    if ( page.startsWith( 'Wikipedia:徵求意見/' ) ) continue;
     let rfc = await getRfcDetails( bot, page )
     rfcs.push( ...rfc.filter( _rfc => _rfc.cats != '未能辨識狀態' ) )
   }
   return rfcs
+}
+
+/**
+ * 
+ * @param { Section[] } arr 
+ * @returns { Section[] }
+ */
+const concatenateContent = ( arr ) => {
+  // Find the indices of elements where level <= 2
+  const mainIndices = arr
+    .map((item, index) => (item.level <= 2 ? index : -1))
+    .filter(index => index !== -1);
+
+  // Iterate through the array and concatenate content
+  mainIndices.forEach((mainIndex, idx) => {
+    let nextMainIndex = mainIndices[idx + 1] || arr.length;
+
+    for (let i = mainIndex + 1; i < nextMainIndex; i++) {
+      if (arr[i].level >= 3) {
+        arr[mainIndex].content += arr[i].content;
+      }
+    }
+  });
+
+  return arr;
+}
+
+/**
+ * 
+ * @param { string } sig 
+ * @returns { { user: string, timestamp: Date, sigtext: string } }
+ */
+const parseSignature = sig => {
+
+  const sigRgx = /(\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? ((\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)))/i
+
+  /**
+   * @type { string[] }
+   */
+  const [ _a, _b, user, full, year, m, d, hour, min ] = sig.match( sigRgx );
+
+  const month = `0${ m }`.slice( -2 );
+  const day   = `0${ d }`.slice( -2 );
+
+  return {
+    user: capitalize( user ),
+    timestamp: new Date( `${ year }-${ month }-${ day }T${ hour }:${ min }:00+00:00` ),
+    sigtext: full,
+  }
+
 }
 
 /**
@@ -70,105 +127,109 @@ const getRfcs = async ( bot ) => {
  * @returns { Promise< RfcArr > }
  */
 const getRfcDetails = async ( bot, title ) => {
-  let page = new bot.Page( `${ title }` )
-  log( `[RFC] 正在獲取 ${ title } 的討論記錄` )
-  let wikitext = await page.text()
-
   /** @type { RfcArr } */
-  let rfcs = [];
-  try {
-    const rgx = /(\{\{ ?rfc(?:[ _]subpage)?[^\}]*?)(\}\})((?:.|\n)+?\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)[^|\]\/#]+(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? (\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)\s*?(?:\n|$))/i
-    const rgxg = new RegExp( rgx.source, rgx.flags + 'g' )
-    let rfcQs = wikitext.match( rgxg ) || []
-    
-    for ( const rfcQ of rfcQs ) {
-      const lede = rfcQ.replace( rgx, "$3" ).trim()
+  const rfcs = [];
 
-      let p = /\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? ((\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\))/i
-      let signatures = ( wikitext.split(/(^|\n)==[^=].+?[^=]==\n/g).find( x => rgx.test(x) ).match( new RegExp( p.source, p.flags + "g" ) ) || [] ).map( sig => {
-        // console.log( sig.match( p ) )
-        let [ _, user, full, year, month, day, hour, min ] = sig.match( p )
-        // user = user.split(/\//g)[0]
-        if ( month.length == 1 ) month = "0" + month
-        if (   day.length == 1 )   day = "0" + day
-        return {
-          user: capitalize( user ),
-          timestamp: new Date( `${ year }-${ month }-${ day }T${ hour }:${ min }:00+00:00` ),
-          sigtext: full,
-        }
-      } )
-      // console.log( signatures )
-      const lede_sig = ( () => {
-        let [ _, user, full, year, month, day, hour, min ] = lede.match( p )
-        if ( month.length == 1 ) month = "0" + month
-        if (   day.length == 1 )   day = "0" + day
-        return {
-          user: capitalize( user ),
-          timestamp: new Date( `${ year }-${ month }-${ day }T${ hour }:${ min }:00+00:00` ),
-          sigtext: full,
-        }
-      } )()
+  try {
+
+    const page = new bot.Page( `${ title }` )
+    log( `[RFC] 正在獲取 ${ title } 的討論記錄` )
+
+    const wikitext = new bot.Wikitext( await page.text() )
+    wikitext.unbind();
+
+    const _sections = wikitext.parseSections();
+    _sections[0].header = 'top';
+
+    const sections = concatenateContent( _sections )
+
+    const rfcRgx = /(\{\{ ?rfc(?:[ _]subpage)?[^\}]*?)(\}\})((?:.|\n)+?)/i
+    const sigRgx = /(\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? ((\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)))/i
+    const sufRgx = /(\s*?(?:\n|\{\{RMCategory|$))/i
+
+    const rgx = new RegExp( [ rfcRgx, sigRgx, sufRgx ].map( x => x.source ).join(''), 'i' )
+    
+    const rfcSections = sections.filter( s => s.level <= 2 && rgx.test( s.content ) )
+
+    for ( const rfcQ of rfcSections ) {
+
+      const match = rfcQ.content.match( rgx )
+      
+      const lede = [ 3, 4, 12 ].map( x => match[x] ).join( '' )
+
+      /**
+       * @type { RegExpMatchArray }
+       */
+      const _signatures = ( rfcQ.content.match( new RegExp( sigRgx.source, 'gi' ) ) ?? [] );
+      const signatures = _signatures.map( parseSignature );
+
+      
       const last_comment = signatures.sort( ( a, b ) => {
         return b.timestamp - a.timestamp
       } )[0];
-      if ( Math.abs( moment().diff(moment(last_comment.timestamp), 'days') ) > 30 ) {
+
+      if ( Math.abs( moment().diff( moment( last_comment.timestamp ), 'days' ) ) > 30 ) {
         editPage( page, ( { content: old_content } ) => {
           return { 
-            text: old_content.replace( rgx, `$3` ),
-            summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：移除不活躍討論的RFC模板`
+            text: old_content.replace( rgx, `$3$4$12` ),
+            summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人]]：移除不活躍討論的RFC模板`
           }
         }, `[RFC] 已移除 ${ title } 一則不活躍徵求意見` )
         continue;
       }
 
+      const section = html2Text(
+        await new bot.Wikitext( rfcQ.header ).apiParse( { prop: 'text' } )
+      , { selectors: [ { selector: 'a', options: { ignoreHref: true } } ] }
+      ).trim()
+      
+      log( `[RFC] 　　討論標題：${ section }` )
 
-      let rfcId = rfcQ.match( /\{\{ ?rfc(?:[ _]subpage)?[^\}]+rfcid *?= *?([^ }]+)[^\}]*\}\}/i )
-      let rfcQm = rfcQ.match( rgx )
+      const lede_sig = parseSignature( lede )
+
+      const rfcTemplate = new bot.Wikitext( rfcQ.content ).parseTemplates( {
+        namePredicate: str => /^rfc(?:[ _]subpage)?$/i.test( str )
+      } )[0]
 
       let frs = title.endsWith( '沙盒' ) ? true : false;
 
-      if ( !rfcId ) {
-        rfcId = hash( `${ rfcQm[4] }${ rfcQm[5].length == 1 ? '0' : '' }${ rfcQm[5] }${ rfcQm[6].length == 1 ? '0' : '' }${ rfcQm[6] }${ rfcQm[7] }${ rfcQm[8] }${ title }` )
+      const hasId = !!rfcTemplate.getParam( 'rfcid' );
+      const rfcId = rfcTemplate.getValue( 'rfcid' ) ?? hash( 
+        `${ match[7] }${ `0${match[8]}`.slice(-2) }${ `0${match[9]}`.slice(-2)
+        }${ match[10] }${ match[11] }${ title }`
+      );
 
-        await editPage( page, ( { content: old_content } ) => {
-          // console.log( old_content )
-          let section = old_content.split(/(^|\n)==[^=].+?[^=]==\n/g)
-            .find( s => {
-              let m = s.match( rgx )
-              if ( !m ) return false;
-              let t = m[1]
-              if ( !/rfcid/.test( t ) ) return true;
-              else return false;
-            } )
-          let new_section = section.replace( rgx, `$1|rfcid=${rfcId}$2$3` )
+      if ( !hasId ) {
+
+        log( `[RFC] 　　需要增加RFC ID` )
+
+        await editPage( page, ( { content: oldContent } ) => {        
+          const temp = `${ rfcQ.content }`
+
+          rfcQ.content = rfcQ.content.replace( rgx, `$1|rfcid=${rfcId}$2$3$4$12` )
           return { 
-            text: old_content.replace( section, new_section ),
-            summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：更新RFC模板`
+            text: oldContent.replace( temp, rfcQ.content ),
+            summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人]]：更新RFC模板`
           }
-        }, `[RFC] 已為 ${ title } 一則徵求意見添加ID` )
+          
+        }, `[RFC] 已為 ${ title } 一則徵求意見添加ID` );
+
         frs = true;
+
       }
-      else rfcId = rfcId[1];
 
-      wikitext = await page.text()
-      const _c = wikitext.split( /(?:(?:^|\n)==(?!=)([^\n]+)==(?!=)\n)/ );
-      const _i = _c.findIndex( _ => _.includes( `rfcid=${rfcId}` ) );
-      console.log( _c, _i, _c[ _i ], _c[ _i - 1 ] )
-      const section = _c[ _i - 1 ].replace( /\[\[(?:[^\|\]]+\||:)?([^\]]+)\]\]/g, "$1" ).trim();
-      log( `[RFC] 　　討論標題：${ section }` )
-
-      const cats = getCatsFromTemplate( rfcQ );
+      const cats = getCatsFromTemplate( rfcTemplate );
       log( `[RFC] 　　分類：${ cats }` )
+
       rfcs.push( {
         page: title,
         section,
-        cats,
-        lede,
+        cats, lede,
         id  : rfcId,
         last: last_comment,
-        lede_sig,
-        frs
+        lede_sig, frs
       } )
+
     }
   }
   catch ( err ) {
@@ -176,19 +237,22 @@ const getRfcDetails = async ( bot, title ) => {
     log( `[RFC] 未能正常讀取該頁：` + err )
     console.error( err )
   }
+  
   return rfcs;
 }
 
+/**
+ * 
+ * @param { Template } rfcTemplate 
+ * @returns { string[] }
+ */
+const getCatsFromTemplate = ( rfcTemplate ) => {
 
-const getCatsFromTemplate = ( wt ) => {
-  let rfcTemplate = wt.match( /\{\{ ?rfc(?:[ _]subpage)? ?\| ?(.+?)\}\}/i )
-  if ( !rfcTemplate || !rfcTemplate[1] ) return "未能辨識狀態";
-  else {
-    const cats = rfcTemplate[1].split( /\|/g ).map( x => x.trim() );
-    const valcats = cats.filter( cat => Object.keys( rfcLists ).includes( cat ) );
-    if ( !valcats || !valcats.length ) return [ 'unsorted' ];
-    else return valcats;
-  }
+  const cats = [1,2,3].map( x => ( rfcTemplate.getValue( x ) ?? '' ).trim() );
+  const valcats = cats.filter( cat => !!cat && Object.keys( rfcLists ).includes( cat ) );
+  
+  if ( !valcats || !valcats.length ) return [ 'unsorted' ];
+  else return valcats;
 }
 
 /**
@@ -216,7 +280,7 @@ const editLists = async ( bot, rfcs ) => {
     await rfcListPage.edit( ( { content: old_content } ) => {
       return {
         text: rfcListWt,
-        summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人（測試）]]：更新RFC列表頁（${ relatedRfcs.length }個活躍討論）`
+        summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人]]：更新RFC列表頁（${ relatedRfcs.length }個活躍討論）`
       }
     } )
     log( `[RFC] 已更新 ${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }（${ relatedRfcs.length }個活躍討論）`)

@@ -25,35 +25,36 @@ const bot = new Mwn( {
   defaultParams: { assert: 'user' }
 } )
 
-bot.login().then( async () => {
-  console.log( "成功登入" )
-  log( `成功登入` )
-  rfcData.set( "working", false )
-  const main = async () => {
-    try {
-      await genCaseList( bot )
-    }
-    catch ( e ) {
-      log( `[SPI] [ERR] ${ e }` )
-      console.error( e )
-    }
-    try {
-      let lu = rfcData.get( "working" )
-      if ( moment( lu ).add( 10, 'minutes' ) < moment() )
-        rfcData.set( ( lu = false ) )
-      if ( !lu ) await updateRfcList( bot )
-    }
-    catch ( e ) {
-      log( `[RFC] [ERR] ${ e }` )
-      console.error( e )
-      rfcData.set( "working", false )
-    }
-  }
-  var job = new CronJob('0 */10 * * * *', main, null, true);
-  job.start();
-  rfcData.set( "working", false )
-  await main()
-  await getStewardComments( bot )
+await bot.login()
 
-  new CronJob( '0 0 0 * * *', () => { pruneLogs() }, null, true, null, null, true ).start()
-} )
+log( `成功登入` )
+rfcData.set( "working", false )
+
+const main = async () => {
+  try {
+    await genCaseList( bot )
+  }
+  catch ( e ) {
+    log( `[SPI] [ERR] ${ e }` )
+    console.error( e )
+  }
+  try {
+    let lu = rfcData.get( "working" )
+    if ( moment( lu ).add( 10, 'minutes' ) < moment() )
+      rfcData.set( ( lu = false ) )
+    if ( !lu ) await updateRfcList( bot )
+  }
+  catch ( e ) {
+    log( `[RFC] [ERR] ${ e }` )
+    console.error( e )
+    rfcData.set( "working", false )
+  }
+}
+
+var job = new CronJob('0 */10 * * * *', main, null, true);
+job.start();
+rfcData.set( "working", false )
+await main()
+await getStewardComments( bot )
+
+new CronJob( '0 0 0 * * *', () => { pruneLogs() }, null, true, null, null, true ).start()

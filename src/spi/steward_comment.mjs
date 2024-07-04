@@ -6,10 +6,16 @@ import { time, capitalize, $, log } from '../fn.mjs';
 
 const metabot = new Mwn( {
   apiUrl: 'https://meta.wikimedia.org/w/api.php',
-  userAgent: 'LuciferianBotSPI/1.0 (https://zh.wikipedia.org/wiki/Wikipedia:SPI)',
+
+  username: process.env.USERNAME,
+  password: process.env.BOTPASSWORD,
+
+  userAgent: process.env.USERAGENT,
   
   defaultParams: { assert: 'user' }
 } )
+
+await metabot.login()
 
 /**
  * 
@@ -60,6 +66,7 @@ export default async ( bot ) => {
     const stream = new WikimediaStream( "recentchange" );
     
     stream.on( "recentchange", async ( data ) => {
+      // console.log( data )
       try {
         // console.log( data )
         const isWhatWeAreLookingFor =
@@ -105,7 +112,7 @@ export default async ( bot ) => {
         let out = `監管員[[:m:User:${ data.user }|${ data.user }]]在[[:m:SRCU]]作出了'''[[:m:Special:Diff/${ data.revision.new }|回覆]]'''${ changeState ? `並將案件狀態設為${ srcuStatus( changeState ) }` : "" }。`
         log( `[SPI] 　　屬於${ SPIcase }` )
 
-        let SPIpage = new bot.page( SPIcase )
+        let SPIpage = new bot.Page( SPIcase )
         let SPI_wt = await SPIpage.text()
         console.log( SPI_wt.match( /=== *\d{4}年\d{1,2}月\d{1,2}日 *===(?:.|\n)+?----<!--+ 所有留言請放在此行以上 -->/g ) )
         let endorsedCase = SPI_wt.match( /=== *\d{4}年\d{1,2}月\d{1,2}日 *===(?:.|\n)+?----<!--+ 所有留言請放在此行以上 -->/g ).find( _case => _case.match( /\{\{SPI[ _]case[ _]status ?\| ?(?:(?!close|admin|open).+)? ?\}\}/i ) )
@@ -137,7 +144,7 @@ export default async ( bot ) => {
         log( "[ERR] 發送監管員留言通知時出現錯誤：\n      　　" + e )
         console.log( e )
       }
-    } )
+    } ).on( "error", console.error )
   } catch (e) {
     log( "[ERR] 發送監管員留言通知時出現錯誤：\n      　　" + e )
     console.log( e )

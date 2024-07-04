@@ -6,7 +6,8 @@
   "scripts": {
     "build": "cd /volume1/docker/zhwiki-bot && sudo docker-compose up -d",
     "logs": "sudo docker logs -f zhwiki-bot",
-    "restart": "sudo docker restart zhwiki-bot"
+    "restart": "sudo docker restart zhwiki-bot",
+    "test": "node src/test.mjs"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,7 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.4.1",
     "fs": "^0.0.1-security",
+    "html-to-text": "^9.0.5",
     "jquery": "^3.7.1",
     "jsdom": "^24.0.0",
     "lodash": "^4.17.21",

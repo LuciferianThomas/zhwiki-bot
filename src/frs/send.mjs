@@ -89,7 +89,7 @@ const getArbitraryUsers = ( rfc, subsc, list, lim ) => {
   const count = Object.keys( curList ).length;
   log( `[FRS] 訂閱列表 ${ list } 上找到 ${ count } 個用戶`)
   if ( count == 0 ) return [];
-  const target = lim ?? Math.max( Math.round( Math.random() * count ), 1 );
+  const target = lim ?? Math.max( Math.round( Math.random() * count ), Math.round( count / 2 ) );
   log( `[FRS] 　　將會在訂閱列表 ${ list } 中選擇 ${ target } 個用戶`)
 
   const records = getCleanRecords( list );
@@ -176,7 +176,7 @@ const sendToList = async ( bot, rfc, list, sendlist ) => {
       await u.talkpage.newSection(
         `討論邀請：就${ rfcLists[ list ] }主題討論徵求意見`,
         `{{subst:FRS notification|title1=${ rfc.page }|header1=${ rfc.section }|type1=${ rfcLists[ list ] }|rfcid1=${ rfc.id }}}\n--{{subst:User:LuciferianBot/SPIsign}} ~~~~~`,
-        { summary: `[[Wikipedia:机器人/申请/LuciferianBot/6|機械人（測試）]]：發送[[WP:FRS]]討論邀請`,
+        { summary: `[[Wikipedia:机器人/申请/LuciferianBot/6|機械人]]：發送[[WP:FRS]]討論邀請`,
           sectiontitle: `討論邀請：就${ rfcLists[ list ] }主題討論徵求意見` }
       )
       log( `[FRS] 已發送訊息給 User talk:${ user }` )
