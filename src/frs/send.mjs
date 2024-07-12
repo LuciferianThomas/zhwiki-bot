@@ -64,7 +64,7 @@ const getCleanRecords = ( list ) => {
 
 /**
  * 
- * @param { import('../rfc/update.mjs').RfcObj } rfc 
+ * @param { import('../RFC/update.mjs').RfcObj } rfc 
  * @param { frsSubsc } subsc 
  * @param { string } list 
  * @param { number? } lim 
@@ -159,7 +159,7 @@ const rfcLists = {
 /**
  * 
  * @param { Mwn } bot 
- * @param { import('../rfc/update.mjs').RfcObj } rfc 
+ * @param { import('../RFC/update.mjs').RfcObj } rfc 
  * @param { string } list 
  * @param { string[] } sendlist 
  * @returns 
@@ -191,17 +191,25 @@ const sendToList = async ( bot, rfc, list, sendlist ) => {
 /**
  * 
  * @param { Mwn } bot
- * @param { import('../rfc/update.mjs').RfcObj } rfc
+ * @param { import('../RFC/update.mjs').RfcObj } rfc
  */
 export default async ( bot, rfc ) => {
   log( `[FRS] 為 ${ rfc.page } 的RFC發送FRS通告` )
   
-  const subsc = await getList( bot )
-  console.log( subsc )
-  for ( const list of rfc.cats ) {
-    const sendlist = getArbitraryUsers( rfc, subsc, list )
-    console.log( sendlist )
-    await sendToList( bot, rfc, list, sendlist )
+  try {
+
+    const subsc = await getList( bot )
+    console.log( subsc )
+    for ( const list of rfc.cats ) {
+      const sendlist = getArbitraryUsers( rfc, subsc, list )
+      console.log( sendlist )
+      await sendToList( bot, rfc, list, sendlist )
+    }
+    frsRecord.set( rfc.id, undefined )
+
   }
-  frsRecord.set( rfc.id, undefined )
+  catch ( e ) {
+    log( `[FRS] [ERR] ${ e }` )
+    console.trace( e )
+  }
 }

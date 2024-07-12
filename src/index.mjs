@@ -1,16 +1,18 @@
 import { Mwn } from 'mwn'
+import { WikimediaStream } from "wikimedia-streams";
 import { CronJob } from 'cron';
 import moment from 'moment';
 
 import { time, log, pruneLogs } from './fn.mjs';
-import genCaseList from './spi/case_list.mjs';
-import getStewardComments from './spi/steward_comment.mjs';
+import genCaseList from './SPI/case_list.mjs';
+import getStewardComments from './SPI/steward_comment.mjs';
 
-import updateRfcList from './rfc/update.mjs';
-import sendFrs from './frs/send.mjs';
+import updateRfcList from './RFC/update.mjs';
+import updateTalkIndex from './TID/update.mjs';
 
 import { CDB } from './db.mjs'
-const rfcData = new CDB( 'RFC' )
+import update from './RFC/update.mjs';
+const SAFETY = new CDB( 'SAFE' )
 
 // console.log( 'env', process.env )
 
@@ -25,36 +27,39 @@ const bot = new Mwn( {
   defaultParams: { assert: 'user' }
 } )
 
+const stream = new WikimediaStream( "recentchange" );
+
 await bot.login()
 
 log( `成功登入` )
-rfcData.set( "working", false )
+SAFETY.set( "working", false )
 
 const main = async () => {
-  try {
-    await genCaseList( bot )
-  }
-  catch ( e ) {
-    log( `[SPI] [ERR] ${ e }` )
-    console.error( e )
-  }
-  try {
-    let lu = rfcData.get( "working" )
-    if ( moment( lu ).add( 10, 'minutes' ) < moment() )
-      rfcData.set( ( lu = false ) )
-    if ( !lu ) await updateRfcList( bot )
-  }
-  catch ( e ) {
-    log( `[RFC] [ERR] ${ e }` )
-    console.error( e )
-    rfcData.set( "working", false )
-  }
+  await genCaseList( bot )
+  await updateRfcList( bot )
+  await updateTalkIndex( bot )
 }
 
 var job = new CronJob('0 */10 * * * *', main, null, true);
 job.start();
-rfcData.set( "working", false )
+SAFETY.set( "working", false )
 await main()
-await getStewardComments( bot )
+
+// const srcuPage = 'User:LuciferianThomas/沙盒/3'
+const srcuPage = 'Steward requests/Checkuser' 
+    
+stream.on( "recentchange", async ( data ) => {
+  if (
+    data.wiki === 'metawiki'
+    && data.title === srcuPage
+    && data.length.old < data.length.new
+  ) getStewardComments( bot, data, srcuPage );
+
+  if (
+    data.wiki === 'zhwiki'
+    && data.title === srcuPage
+    && data.length.old < data.length.new
+  ) getStewardComments( bot, data, srcuPage );
+} ).on( "error", console.error )
 
 new CronJob( '0 0 0 * * *', () => { pruneLogs() }, null, true, null, null, true ).start()

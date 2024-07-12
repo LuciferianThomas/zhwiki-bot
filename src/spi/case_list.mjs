@@ -308,29 +308,37 @@ let lastDone;
  * @param { Mwn } bot
  */
 export default async ( bot ) => {
-  const TABLE_LOCATION = 'Wikipedia:傀儡調查/案件'
-  let clerks = await getClerkList( bot )
-  let checkusers = await getCUList( bot )
-  let stewards = await getStewardList( bot )
-  clerks.push( ...checkusers, ...stewards )
-  // console.log( clerks )
-  let cases = await getAllCases( bot, clerks )
-  let newCUreq = cases.filter( _case => {
-    // if ([ "CUREQUEST", "CU", "REQUEST", "CHECKUSER" ].includes( _case.status.toUpperCase() )) console.log( _case.name, moment( _case.file_time ), moment( lastDone ).startOf('minute') )
-    return [ "CUREQUEST", "CU", "REQUEST", "CHECKUSER" ].includes( _case.status.toUpperCase() )
-      && typeof _case.file_time != "string"
-      && moment( _case.file_time ).isSameOrAfter( moment( lastDone ).startOf('minute') ) 
-  } )
-  let list = new bot.Page( TABLE_LOCATION )
-  await list.edit( ( { content } ) => {
-    return {
-      text: generateCaseTable( cases ),
-      summary: `[[Wikipedia:机器人/申请/LuciferianBot/3|機械人]]：更新SPI案件列表（${ cases.length }活躍提報）`,
-      bot: true
-    }
-  } )
-  log( `[SPI] 已完成更新SPI案件列表（${ cases.length }活躍提報）` )
-  lastDone = new moment();
-  await staleCU( bot, newCUreq );
-  return;
+
+  try {
+    const TABLE_LOCATION = 'Wikipedia:傀儡調查/案件'
+    let clerks = await getClerkList( bot )
+    let checkusers = await getCUList( bot )
+    let stewards = await getStewardList( bot )
+    clerks.push( ...checkusers, ...stewards )
+    // console.log( clerks )
+    let cases = await getAllCases( bot, clerks )
+    let newCUreq = cases.filter( _case => {
+      // if ([ "CUREQUEST", "CU", "REQUEST", "CHECKUSER" ].includes( _case.status.toUpperCase() )) console.log( _case.name, moment( _case.file_time ), moment( lastDone ).startOf('minute') )
+      return [ "CUREQUEST", "CU", "REQUEST", "CHECKUSER" ].includes( _case.status.toUpperCase() )
+        && typeof _case.file_time != "string"
+        && moment( _case.file_time ).isSameOrAfter( moment( lastDone ).startOf('minute') ) 
+    } )
+    let list = new bot.Page( TABLE_LOCATION )
+    await list.edit( ( { content } ) => {
+      return {
+        text: generateCaseTable( cases ),
+        summary: `[[Wikipedia:机器人/申请/LuciferianBot/3|機械人]]：更新SPI案件列表（${ cases.length }活躍提報）`,
+        bot: true
+      }
+    } )
+    log( `[SPI] 已完成更新SPI案件列表（${ cases.length }活躍提報）` )
+    lastDone = new moment();
+    await staleCU( bot, newCUreq );
+    return;
+  }
+  catch ( e ) {
+    log( `[SPI] [ERR] ${ e }` )
+    console.trace( e )
+  }
+
 }

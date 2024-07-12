@@ -28,5 +28,8 @@
     "url": "^0.11.3",
     "weighted": "^1.0.0",
     "wikimedia-streams": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/html-to-text": "^9.0.4"
   }
 }
