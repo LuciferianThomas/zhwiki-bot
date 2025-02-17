@@ -276,7 +276,7 @@ const generateTalkIndex = async ( bot, prev, cutoff, entries ) => {
       await editPage( indexPage, () => {
         return {
           text: pre + out,
-          summary: `機械人測試：生成NS${ ns }討論頁話題索引（${ entries.length }個活躍討論）`
+          summary: `[[Wikipedia:机器人/申请/LuciferianBot/7|機械人測試]]：生成NS${ ns }討論頁話題索引（${ entries.length }個活躍討論）`
         }
       }, "TID", `已生成NS${ ns }討論頁話題索引（${ entries.length }個活躍討論）`)
     }

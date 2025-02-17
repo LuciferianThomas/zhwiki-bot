@@ -14,6 +14,8 @@ import url from 'url';
 const __dirname = path.dirname( url.fileURLToPath( import.meta.url ) );
 const logpath = path.join(__dirname, "..", "logs" );
 
+const sigRgx = /\[\[:?(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? (\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)/i
+
 const time = ( date = moment(), format = "YYYY-MM-DD HH:mm" ) => {
   return moment( date ).utcOffset( 8 ).format( format )
 }
@@ -172,6 +174,7 @@ export {
   time,
   capitalize,
   $,
+  sigRgx,
   log,
   logx,
   editPage,

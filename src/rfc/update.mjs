@@ -84,7 +84,7 @@ const getRfcDetails = async ( bot, title ) => {
     const sections = concatenateSections( _sections )
 
     const rfcRgx = /(\{\{ ?(?:rfc(?:[ _]subpage)?|徵求意見|征求意见)[^\}]*?)(\}\})((?:.|\n)+?)/i
-    const sigRgx = /(\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? ((\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)))/i
+    const sigRgx = /(\[\[\:?(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? ((\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)))/i
     const sufRgx = /(\s*?(?:\n|\{\{RMCategory[^\}]\}\}|$))/i
 
     const rgx = new RegExp( [ rfcRgx, sigRgx, sufRgx ].map( x => x.source ).join(''), 'i' )

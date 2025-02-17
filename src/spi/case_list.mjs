@@ -1,9 +1,11 @@
 import { Mwn } from 'mwn';
 import moment from 'moment';
 
-import { time, capitalize, log, logx, trycatch, updateJobStatus } from '../fn.mjs';
+import { time, capitalize, parseSignature, editPage, log, logx, trycatch, updateJobStatus, sigRgx } from '../fn.mjs';
 
 import staleCU from './stale_cu.mjs';
+
+/** @typedef { { name: string, status: string, text: string, last_comment: import('../fn.mjs').Signature, last_volunteer: import('../fn.mjs').Signature, file_time: Date }|{ name: string, status: string, error: string } } SPICase */
 
 /**
  * 
@@ -76,72 +78,6 @@ async function getStewardList( bot ) {
   return stewards
 }
 
-/** @deprecated */
-async function getStatusFromCat( categories ) {
-  logx( "SPI", "正在獲取案件狀態" )
-  const cat2status = {
-    // 'SPI cases currently being checked': 'inprogress',
-    '傀儡調查－等候進行查核': 'endorsed',
-    '傀儡調查－社群共識轉交查核': 'condefer',
-    '傀儡調查－重新提出查核': 'relist',
-    '傀儡調查－等候查核檢查': 'CUrequest',
-    '傀儡調查－請求管理員協助': 'admin',
-    '傀儡調查－請求調查助理協助': 'clerk',
-    '傀儡調查－完成用戶查核': 'checked',
-    '傀儡調查－待處理': 'open',
-    '傀儡調查－用戶查核員拒絕查核請求': 'cudeclined',
-    '傀儡調查－調查助理拒絕查核請求': 'declined',
-    '傀儡調查－需要更多資訊': 'moreinfo',
-    // 'SPI cases on hold by checkuser': 'cuhold',
-    '傀儡調查－調查助理擱置': 'hold',
-    '傀儡調查－等候存檔': 'close',
-  }
-
-  let statuses = []
-  for ( var cat of categories ) {
-    let title = cat.category
-
-    if ( title in cat2status ) {
-      statuses.push( cat2status[ title ] )
-    }
-  }
-
-  let result = []
-    , curequest_only = []
-    , misc_only = []
-  
-  const priority = [ 'clerk', 'admin', 'checked', 'close' ]
-      , curequest = { 'inprogress': 0, 'relist': 1, 'condefer': 1.5, 'endorsed': 2, 'CUrequest': 3 }
-      , misc = {
-        'open': 0, 'cudeclined': 1,
-        'declined': 2, 'moreinfo': 3, 
-        /* 'cuhold': 4, */ 'hold': 5}
-  
-  for ( var status of statuses ) {
-    if ( priority.includes( status ) ) {
-      result.push( status )
-    }
-    else if ( status in curequest ) {
-      curequest_only.push( status )
-    }
-    else if ( status in misc ) {
-      misc_only.push( status )
-    }
-  }
-      
-  if ( curequest_only.length ) {
-    result.push( curequest_only.sort( ( a, b ) => {
-      curequest[ a ] - curequest[ b ]
-    } )[ 0 ] )
-  }
-  if ( misc_only.length && ( result.length == 0 || ( result.length == 1 && result[ 0 ] == 'close' ) ) ) {
-    result.push( misc_only.sort( ( a, b ) => {
-      misc[ a ] - misc[ b ]
-    } )[ 0 ] )
-  }
-  return result
-}
-
 /**
  * 
  * @param { string } wt 
@@ -158,7 +94,7 @@ async function getCaseDetails( bot, title, clerks ) {
   logx( "SPI", `正在獲取 ${ title } 的案件資訊` )
   let wikitext = await page.text()
 
-  /** @type { { name: string, status: }[] } */
+  /** @type { SPICase[] } */
   let cases = [];
 
   try {
@@ -172,20 +108,11 @@ async function getCaseDetails( bot, title, clerks ) {
       }
   
       logx( "SPI", "　　正在找出最後留言之用戶" )
-  
-      let p = /\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? (\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)/i
-    
-      let signatures = ( _case.text.match( new RegExp( p.source, p.flags + "g" ) ) || [] ).map( sig => {
-        // console.log( sig.match( p ) )
-        let [ _, user, year, month, day, hour, min ] = sig.match( p )
-        // user = user.split(/\//g)[0]
-        if ( month.length == 1 ) month = "0" + month
-        if (   day.length == 1 )   day = "0" + day
-        return {
-          user: capitalize( user ),
-          timestamp: new Date( `${ year }-${ month }-${ day }T${ hour }:${ min }:00+00:00` )
-        }
-      } )
+      
+      /** @type { string[] } */
+      let _signatures = ( _case.text.match( new RegExp( sigRgx.source, sigRgx.flags + "g" ) ) || [] )
+      /** @type { import('../fn.mjs').Signature[] } */
+      let signatures = _signatures.map( sig => parseSignature( sig ) )
       
       _case.last_comment = signatures.filter( sig => {
         return !clerks.includes( sig.user )
@@ -233,6 +160,11 @@ async function getCaseDetails( bot, title, clerks ) {
   return cases 
 }
 
+/**
+ * 
+ * @param { SPICase[] } cases 
+ * @returns 
+ */
 function sortCases( cases ) {
   const rank = {
     'ENDORSE': 1, 'ENDORSED': 1,
@@ -272,6 +204,11 @@ async function getAllCases( bot, clerks ) {
   return sortCases( cases )
 }
 
+/**
+ * 
+ * @param { SPICase } _case 
+ * @returns string
+ */
 function formatTableRow( _case ) {
   
   return `{{SPIstatusentry|1=${ _case.name
@@ -283,7 +220,7 @@ function formatTableRow( _case ) {
             : "未知"
     }|4=${ _case.last_comment ? _case.last_comment.user.replace( /^(([0-9A-F]{1,4})\:.*\:([^:]+\:[^:]+))$/i, `<abbr title="$1">$2...$3</abbr>` ) : ""
     }|5=${ _case.last_comment ? time( _case.last_comment.timestamp ) : ""
-    }|6=${ _case.last_clerk ? _case.last_clerk.user.replace( /^(([0-9A-F]{1,4})\:.*\:([^:]+\:[^:]+))$/i, `<abbr title="$1">$2...$3</abbr>` ) : ""
+    }|6=${ _case.last_clerk ? _case.last_clerk.user : ""
     }|7=${ _case.last_clerk ? time( _case.last_clerk.timestamp ) : "" }${
       _case.error
       ? `|error=${ _case.error }`
@@ -291,6 +228,11 @@ function formatTableRow( _case ) {
     }}}\n`
 }
 
+/**
+ * 
+ * @param { SPICase } cases 
+ * @returns string
+ */
 function generateCaseTable( cases ) {
   let result = "{{SPIstatusheader}}\n"
   for ( var _case of cases ) {
@@ -327,14 +269,13 @@ export default async ( bot ) => {
         && moment( _case.file_time ).isSameOrAfter( moment( lastDone ).startOf('minute') ) 
     } )
     let list = new bot.Page( TABLE_LOCATION )
-    await list.edit( ( { content } ) => {
+    await editPage( list, ( { content } ) => {
       return {
         text: generateCaseTable( cases ),
         summary: `[[Wikipedia:机器人/申请/LuciferianBot/3|機械人]]：更新SPI案件列表（${ cases.length }活躍提報）`,
         bot: true
       }
-    } )
-    logx( "SPI", `已完成更新SPI案件列表（${ cases.length }活躍提報）` )
+    }, "SPI", `已完成更新SPI案件列表（${ cases.length }活躍提報）` )
     lastDone = new moment();
     await trycatch( updateJobStatus( bot, 3, 1 ) )
     await staleCU( bot, newCUreq );
