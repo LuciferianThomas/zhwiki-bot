@@ -2,7 +2,7 @@ import { Mwn } from 'mwn';
 import moment from 'moment';
 import { convert as html2Text } from 'html-to-text';
 
-import { time, capitalize, $, log, editPage, parseSignature, concatenateSections } from '../fn.mjs';
+import { time, capitalize, $, log, logx, editPage, parseSignature, concatenateSections, trycatch, updateJobStatus } from '../fn.mjs';
 import { CDB, hash } from '../db.mjs'
 
 import sendFrs from '../FRS/send.mjs'
@@ -44,14 +44,14 @@ const rfcLists = {
  * @param { Mwn } bot 
  */
 const getRfcs = async ( bot ) => {
-  log( `[RFC] 正在查詢進行中討論` )
+  logx( "RFC", `正在查詢進行中討論` )
   const cat = await bot.getPagesInCategory( '維基百科徵求意見', { cmtype: 'page' } )
   // console.log( cat )
-  log( `[RFC] 　　找到 ${ cat.length } 個進行中討論` )
+  logx( "RFC", `　　找到 ${ cat.length } 個進行中討論` )
   let rfcs = []
   for ( const page of cat ) {
 
-    if ( page.startsWith( 'Wikipedia:徵求意見/' ) ) continue;
+    // if ( page.startsWith( 'Wikipedia:徵求意見/' ) ) continue;
 
     let rfc = await getRfcDetails( bot, page )
     rfcs.push( ...rfc.filter( _rfc => _rfc.cats != '未能辨識狀態' ) )
@@ -73,7 +73,7 @@ const getRfcDetails = async ( bot, title ) => {
   try {
 
     const page = new bot.Page( `${ title }` )
-    log( `[RFC] 正在獲取 ${ title } 的討論記錄` )
+    logx( "RFC", `正在獲取 ${ title } 的討論記錄` )
 
     const wikitext = new bot.Wikitext( await page.text() )
     wikitext.unbind();
@@ -83,7 +83,7 @@ const getRfcDetails = async ( bot, title ) => {
 
     const sections = concatenateSections( _sections )
 
-    const rfcRgx = /(\{\{ ?rfc(?:[ _]subpage)?[^\}]*?)(\}\})((?:.|\n)+?)/i
+    const rfcRgx = /(\{\{ ?(?:rfc(?:[ _]subpage)?|徵求意見|征求意见)[^\}]*?)(\}\})((?:.|\n)+?)/i
     const sigRgx = /(\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? ((\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)))/i
     const sufRgx = /(\s*?(?:\n|\{\{RMCategory[^\}]\}\}|$))/i
 
@@ -107,22 +107,18 @@ const getRfcDetails = async ( bot, title ) => {
         return b.timestamp - a.timestamp
       } )[0];
 
-      if ( Math.abs( moment().diff( moment( lastComment.timestamp ), 'days' ) ) > 30 ) {
-        editPage( page, ( { content: old_content } ) => {
-          return { 
-            text: old_content.replace( rgx, `$3$4$12` ),
-            summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人]]：移除不活躍討論的RFC模板`
-          }
-        }, `[RFC] 已移除 ${ title } 一則不活躍徵求意見` )
-        continue;
-      }
+      const _sectionHeader = await new bot.Wikitext( `== ${ rfcQ.header } ==` ?? '' )
+      .apiParse( { prop: 'text' } )
 
-      const section = $(
-        await new bot.Wikitext( `== ${ rfcQ.header } ==` ?? '' )
-          .apiParse( { prop: 'text' } )
-      ).find( '.mw-headline' ).attr( 'id' )
+      const section = decodeURIComponent(
+        (
+          $( _sectionHeader ).find( '.mw-heading > h2 > span' ).get(0)
+          ?? $( _sectionHeader ).find( '.mw-heading > h2' ).get(0)
+        ).id
+          .replace( /\.([0-9A-F]{2})/g, "%$1" ).replace( /_/g, " " )
+      )
       
-      log( `[RFC] 　　討論標題：${ section }` )
+      logx( "RFC", `　　討論標題：${ section }` )
 
       const lede_sig = parseSignature( lede )
 
@@ -138,9 +134,19 @@ const getRfcDetails = async ( bot, title ) => {
         }${ match[10] }${ match[11] }${ title }`
       );
 
+      if ( Math.abs( moment().diff( moment( lastComment.timestamp ), 'days' ) ) > 30 ) {
+        editPage( page, ( { content: old_content } ) => {
+          return { 
+            text: old_content.replace( rgx, `{{subst:anchor|rfc_${ rfcId }}}$3$4$12` ),
+            summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人]]：移除不活躍討論的RFC模板`
+          }
+        }, "RFC", `已移除 ${ title } 一則不活躍徵求意見` )
+        continue;
+      }
+
       if ( !hasId ) {
 
-        log( `[RFC] 　　需要增加RFC ID` )
+        logx( "RFC", `　　需要增加RFC ID` )
 
         await editPage( page, ( { content: oldContent } ) => {        
           const temp = `${ rfcQ.content }`
@@ -151,14 +157,14 @@ const getRfcDetails = async ( bot, title ) => {
             summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人]]：更新RFC模板`
           }
           
-        }, `[RFC] 已為 ${ title } 一則徵求意見添加ID` );
+        }, "RFC", `已為 ${ title } 一則徵求意見添加ID` );
 
         frs = true;
 
       }
 
       const cats = getCatsFromTemplate( rfcTemplate );
-      log( `[RFC] 　　分類：${ cats }` )
+      logx( "RFC", `　　分類：${ cats }` )
 
       rfcs.push( {
         page: title,
@@ -173,7 +179,7 @@ const getRfcDetails = async ( bot, title ) => {
   }
   catch ( err ) {
     /** DO NOTHING for erratic talk pages */
-    log( `[RFC] 未能正常讀取該頁：` + err )
+    logx( "RFC", `未能正常讀取該頁：` + err )
     console.error( err )
   }
   
@@ -213,7 +219,7 @@ const editLists = async ( bot, rfcs ) => {
     let rfcListPage = new bot.Page( `${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }` )
     const oldText = await rfcListPage.text();
     if ( oldText == rfcListWt ) {
-      log( `[RFC] ${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }無需更新（${ relatedRfcs.length }個活躍討論）` )
+      logx( "RFC", `${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }無需更新（${ relatedRfcs.length }個活躍討論）` )
       continue;
     }
     await editPage( rfcListPage, () => {
@@ -221,7 +227,7 @@ const editLists = async ( bot, rfcs ) => {
         text: rfcListWt,
         summary: `[[Wikipedia:机器人/申请/LuciferianBot/5|機械人]]：更新RFC列表頁（${ relatedRfcs.length }個活躍討論）`
       }
-    }, `[RFC] 已更新 ${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }（${ relatedRfcs.length }個活躍討論）`)
+    }, "RFC", `已更新 ${ RFC_LISTS_ROOT }${ rfcLists[ rfcList ] }（${ relatedRfcs.length }個活躍討論）`)
   }
   return;
 }
@@ -239,12 +245,16 @@ export default async ( bot ) => {
 
   RFC.set( "working", moment().toISOString() )
 
+  await trycatch( updateJobStatus( bot, 5, 2 ) )
+
   try {
 
     const rfcs = await getRfcs( bot )
     await editLists( bot, rfcs )
 
-    log( `[RFC] 已完成更新所有RFC列表頁` )
+    logx( "RFC", `已完成更新所有RFC列表頁` )
+    await trycatch( updateJobStatus( bot, 5, 1 ) )
+
     const rfc2frs = rfcs.filter( rfc => rfc.frs )
     console.log( rfc2frs )
     for ( const rfc of rfc2frs ) {
@@ -254,9 +264,11 @@ export default async ( bot ) => {
 
   }
   catch ( e ) {
-    log( `[RFC] [ERR] ${ e }` )
+    logx( "RFC", `[ERR] ${ e }` )
     console.trace( e )
     RFC.set( "working", false )
+    await trycatch( updateJobStatus( bot, 5, 0 ) )
+    return;
   }
 
 }

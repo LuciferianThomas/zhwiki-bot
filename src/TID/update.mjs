@@ -2,7 +2,7 @@ import { Mwn } from 'mwn'
 import { convert as html2Text } from 'html-to-text';
 import moment from 'moment';
 
-import { time, capitalize, $, log, editPage, parseSignature, concatenateSections } from '../fn.mjs';
+import { time, capitalize, $, log, logx, editPage, parseSignature, concatenateSections, trycatch, updateJobStatus } from '../fn.mjs';
 import { CDB, hash } from '../db.mjs'
 
 const TID = new CDB( 'TID' )
@@ -72,8 +72,8 @@ const fetchRecentChanges = async ( bot, prev, cutoff ) => {
 
   } while ( rccontinue )
 
-  log( `[TID] ${ prev } 至今有 ${ entries.length } 個討論頁面有近似留言的編輯。` )
-  // log( `[TID]   ${ entries.map( x => x.title ).join( `\n[TID]   ` ) }` )
+  logx( "TID", `${ prev } 至今有 ${ entries.length } 個討論頁面有近似留言的編輯。` )
+  // logx( "TID", `  ${ entries.map( x => x.title ).join( `\n[TID]   ` ) }` )
 
   return entries.reverse();
 
@@ -98,20 +98,20 @@ const readTalkPages = async ( bot, prev, cutoff, entries ) => {
 
   for ( const [ idx, entry ] of entries.entries() ) {
 
-    log( `[TID] 正在分析 ${ entry.title }（${ idx + 1 }/${ entries.length }）` )
+    logx( "TID", `正在分析 ${ entry.title }（${ idx + 1 }/${ entries.length }）` )
 
     let _page, _wikitext
 
     try {
       _page = new bot.Page( entry.title )
-
       _wikitext = new bot.Wikitext( await _page.text() );
     }
     catch ( err ) {
       // skip
-      log( `[TID] [ERR]   無法分析此頁` )
+      logx( "TID", `[ERR]   無法分析此頁` )
       continue;
     }
+    console.log( 'cont', entry.title )
 
     const page = _page, wikitext = _wikitext
 
@@ -138,14 +138,19 @@ const readTalkPages = async ( bot, prev, cutoff, entries ) => {
       
       const lastSignature = signatures.slice(-1)[0];
 
-      const sectionHeader = $(
-        await new bot.Wikitext( `== ${
-          section.level == 1
-          ? 'top'
-          : section.header ?? ''
-        } ==` ?? '' )
-          .apiParse( { prop: 'text' } )
-      ).find( '.mw-headline' ).attr( 'id' )
+      const _sectionHeader =
+        await new bot.Wikitext(
+          `== ${
+            section.level == 1
+            ? 'top'
+            : section.header ?? ''
+          } ==` ?? ''
+        ) .apiParse( { prop: 'text' } )
+      // console.log( _sectionHeader )
+      const sectionHeader = (
+        $( _sectionHeader ).find( '.mw-heading > h2 > span' ).get(0)
+        ?? $( _sectionHeader ).find( '.mw-heading > h2' ).get(0)
+      ).id
 
       if ( /^((特色列表|(優良|典範)條目)評選|(特色列表|(优良|典范)条目)评选)(（第.次）)?$/.test( sectionHeader ) ) continue;
 
@@ -167,7 +172,7 @@ const readTalkPages = async ( bot, prev, cutoff, entries ) => {
 
       if ( new Date( lastSignature.timestamp ) > new Date( prev ) ) {
 
-        log( `[TID]   ${ entry.title } § ${ sectionHeader } 有新留言，將列入索引` )
+        logx( "TID", `  ${ entry.title } § ${ sectionHeader } 有新留言，將列入索引` )
 
         const thisEntry = {
           title: entry.title,
@@ -197,7 +202,7 @@ const readTalkPages = async ( bot, prev, cutoff, entries ) => {
  */
 const generateTalkIndex = async ( bot, prev, cutoff, entries ) => {
 
-  let out = "{{NoteTA/MediaWiki}}\n本頁由[[User:LuciferianBot|機械人]]自動索引'''最近十四天'''有新留言的[[WP:TALK|討論頁]]話題。\n\n"
+  let pre = "<noinclude>{{NoteTA/MediaWiki}}\n本頁由[[User:LuciferianBot|機械人]]自動索引'''最近十四天'''有新留言的[[WP:TALK|討論頁]]話題。\n</noinclude>\n"
 
   /**
    * @type { { [ ns: string ]: TalkIndexEntry[] } }
@@ -212,6 +217,8 @@ const generateTalkIndex = async ( bot, prev, cutoff, entries ) => {
   }, {} )
 
   for ( const [ ns, entries ] of Object.entries( entriesByNS ) ) {
+
+    let out = "";
 
     out += (
       `== {{NSPN|{{int:lang}}|${ ns }}}話題索引 ==\n`
@@ -229,8 +236,10 @@ const generateTalkIndex = async ( bot, prev, cutoff, entries ) => {
 
       out += (
         `|- \n`
-        + `| [[${ entry.title }#${ encodeURIComponent( entry.section )
-            }|<small style="display:block;">${ entry.title }</small>§ ${ entry.section }]]\n`
+        + `| [[${ entry.title }#${ entry.section
+            }|<small style="display:block;">${ entry.title }</small>§ ${
+              decodeURIComponent( entry.section.replace( /\.([0-9A-F]{2})/g, "%$1" ).replace( /_/g, " " ) ).replace( /(\{\{+|\}\}+|\[\[+|\]\]+)/g, "<nowiki>$1</nowiki>" )
+            }]]\n`
         + `| style="text-align:right;" | ${ entry.signatures.length }\n`
         + `| style="text-align:right;" | ${
             entry.signatures.reduce(
@@ -241,7 +250,11 @@ const generateTalkIndex = async ( bot, prev, cutoff, entries ) => {
         + `| data-sort-type="isoDate" data-sort-value="${
             new Date( lastSignature.timestamp ).toISOString() 
           }"${
-            timeColor ? ` style="background-color:#${ timeColor };"` : ""
+            timeColor 
+            ? ` style="background-color:{{Wikipedia:討論頁話題索引/topic list/color|${
+                new Date( lastSignature.timestamp ).toISOString()
+              }}};"`
+            : ""
           } | {{nowrap|${
             moment( lastSignature.timestamp ).format( 'YYYY-MM-DD' )
           }}} {{nowrap|${
@@ -251,22 +264,81 @@ const generateTalkIndex = async ( bot, prev, cutoff, entries ) => {
 
       )
 
-      log( `[TID] 已紀錄 ${ entry.title } § ${ entry.section }` )
+      logx( "TID", `已紀錄 ${ entry.title } § ${ entry.section }` )
 
     }
 
     out += `|}\n\n`
 
+    try {
+      const indexPage = new bot.Page( `Wikipedia:討論頁話題索引/topic list/NS${ ns }` )
+    
+      await editPage( indexPage, () => {
+        return {
+          text: pre + out,
+          summary: `機械人測試：生成NS${ ns }討論頁話題索引（${ entries.length }個活躍討論）`
+        }
+      }, "TID", `已生成NS${ ns }討論頁話題索引（${ entries.length }個活躍討論）`)
+    }
+    catch (err) {
+      logx( "TID", `[ERR] Topic list page for NS${ ns } does not exist! Skipping...` )
+      continue;
+    }
+
   }
 
-  const indexPage = new bot.Page( 'User:LuciferianThomas/討論頁索引' )
+}
 
-  await editPage( indexPage, () => {
-    return {
-      text: out,
-      summary: `機械人測試：生成討論頁話題索引（${ entries.length }個活躍討論）`
+/**
+ * @param { Mwn } bot
+ */
+const main = async ( bot ) => {
+
+  const cutoff = new Date().toISOString();
+  const prev = (
+    !TID.get( 'cutoff' )
+    || new Date( cutoff ) - new Date( TID.get( 'cutoff' ) ) > 14 * 24 * 60 * 60 * 1000
+  ) ? new Date( new Date( cutoff ) - 14 * 24 * 60 * 60 * 1000 ).toISOString()
+    : TID.get( 'cutoff' )
+
+  const rcEntries = await fetchRecentChanges( bot, prev, cutoff );
+  const unindexed = await readTalkPages( bot, prev, cutoff, rcEntries );
+
+  /**
+   * @type { TalkIndexEntry[] }
+   */
+  const _indexed = TID.get( 'indexed' ) ?? []
+
+  const indexed = []
+
+  for ( const entry of _indexed ) {
+    if (
+      !( await new bot.Page( entry.title ).exists() )
+      || !!unindexed.find( e => e.title == entry.title )
+      || new Date( new Date( cutoff ) ) - new Date( entry.signatures.slice(-1)[0].timestamp )
+          > 14 * 24 * 60 * 60 * 1000
+    ) {
+      continue;
     }
-  }, `[TID] 已生成討論頁話題索引（${ entries.length }個活躍討論）`)
+    entry.signatures = entry.signatures.map( v => { 
+      v.timestamp = new Date( v.timestamp );
+      return v;
+    } )
+
+    indexed.push( entry )
+  }
+
+  const toBeIndexed = [ ...unindexed, ...indexed ].sort(
+    ( a, b ) => 
+      new Date( b.signatures.slice(-1)[0].timestamp )
+      - new Date( a.signatures.slice(-1)[0].timestamp )
+  )
+
+  await generateTalkIndex( bot, prev, cutoff, toBeIndexed )
+
+  TID.set( 'cutoff', cutoff )
+  TID.set( 'indexed', toBeIndexed )
+  TID.set( 'working', false )
 
 }
 
@@ -282,55 +354,19 @@ export default async ( bot ) => {
 
   TID.set( "working", moment().toISOString() )
 
+  await trycatch( updateJobStatus( bot, 7, 2 ) )
+
   try {
-
-    const cutoff = new Date().toISOString();
-    const prev = (
-      !TID.get( 'cutoff' )
-      || new Date( cutoff ) - new Date( TID.get( 'cutoff' ) ) > 14 * 24 * 60 * 60 * 1000
-    ) ? new Date( new Date( cutoff ) - 14 * 24 * 60 * 60 * 1000 ).toISOString()
-      : TID.get( 'cutoff' )
-
-    const rcEntries = await fetchRecentChanges( bot, prev, cutoff );
-    const unindexed = await readTalkPages( bot, prev, cutoff, rcEntries );
-
-    /**
-     * @type { TalkIndexEntry[] }
-     */
-    const indexed = TID.get( 'indexed' ) ?? []
-
-    for ( const entry of indexed ) {
-      if (
-        !( await new bot.Page( entry.title ).exists() )
-        || !!unindexed.find( e => e.title == entry.title )
-        || new Date( new Date( cutoff ) ) - new Date( entry.signatures.slice(-1)[0].timestamp )
-            > 14 * 24 * 60 * 60 * 1000
-      ) {
-        indexed.splice( indexed.findIndex( v => v.title == entry.title ), 1 )
-      }
-      entry.signatures = entry.signatures.map( v => { 
-        v.timestamp = new Date( v.timestamp );
-        return v;
-      } )
-    }
-
-    const toBeIndexed = [ ...unindexed, ...indexed ].sort(
-      ( a, b ) => 
-        new Date( b.signatures.slice(-1)[0].timestamp )
-        - new Date( a.signatures.slice(-1)[0].timestamp )
-    )
-
-    await generateTalkIndex( bot, prev, cutoff, toBeIndexed )
-
-    TID.set( 'cutoff', cutoff )
-    TID.set( 'indexed', toBeIndexed )
-    TID.set( 'working', false )
-
+    await main( bot )
   }
   catch ( e ) {
-    log( `[TID] [ERR] ${ e }` )
+    logx( "TID", `[ERR] ${ e }` )
     console.trace( e )
     TID.set( "working", false )
+    await trycatch( updateJobStatus( bot, 7, 0 ) )
+    return;
   }
+
+  await trycatch( updateJobStatus( bot, 7, 1 ) )
 
 }

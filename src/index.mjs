@@ -3,7 +3,7 @@ import { WikimediaStream } from "wikimedia-streams";
 import { CronJob } from 'cron';
 import moment from 'moment';
 
-import { time, log, pruneLogs } from './fn.mjs';
+import { time, log, logx, pruneLogs } from './fn.mjs';
 import genCaseList from './SPI/case_list.mjs';
 import getStewardComments from './SPI/steward_comment.mjs';
 
@@ -12,7 +12,6 @@ import updateTalkIndex from './TID/update.mjs';
 
 import { CDB } from './db.mjs'
 import update from './RFC/update.mjs';
-const SAFETY = new CDB( 'SAFE' )
 
 // console.log( 'env', process.env )
 
@@ -32,7 +31,6 @@ const stream = new WikimediaStream( "recentchange" );
 await bot.login()
 
 log( `成功登入` )
-SAFETY.set( "working", false )
 
 const main = async () => {
   await genCaseList( bot )
@@ -42,7 +40,6 @@ const main = async () => {
 
 var job = new CronJob('0 */10 * * * *', main, null, true);
 job.start();
-SAFETY.set( "working", false )
 await main()
 
 // const srcuPage = 'User:LuciferianThomas/沙盒/3'

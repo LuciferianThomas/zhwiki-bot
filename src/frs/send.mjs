@@ -2,7 +2,7 @@ import { Mwn } from 'mwn';
 import moment from 'moment';
 import { select as wselect } from 'weighted';
 
-import { time, capitalize, log } from '../fn.mjs';
+import { time, capitalize, log, logx, trycatch, updateJobStatus } from '../fn.mjs';
 import { CDB, hash } from '../db.mjs'
 
 const frsRecord = new CDB( 'FRS' )
@@ -19,7 +19,7 @@ const frsRecord = new CDB( 'FRS' )
  * @returns { Promise< frsSubsc > }
  */
 const getList = async ( bot ) => {
-  log( `[FRS] 正在獲取通知登記表` )
+  logx( "FRS", `正在獲取通知登記表` )
 
   const page = new bot.Page( "Wikipedia:回饋請求服務" )
   const text = ( await page.text() ).split( "<!-- FRS-BOT-START-MARK -->" )[1]
@@ -33,6 +33,7 @@ const getList = async ( bot ) => {
     const sect = lines[ sections[ i ] ].match( sectionRgx )[1];
     const slist = list[ sect ] = {};
     for ( let n = sections[ i ] + 1; n < ( sections[ i + 1 ] ?? lines.length ); n++ ) {
+      if ( /<!--/.test( lines[n] ) ) continue;
       let [ t, user, limit ] = lines[ n ].split( /\|/g )
       if ( !/frs[ _]user/i.test( t ) ) continue;
       if ( !limit ) limit = "1";
@@ -87,10 +88,10 @@ const getArbitraryUsers = ( rfc, subsc, list, lim ) => {
   }
 
   const count = Object.keys( curList ).length;
-  log( `[FRS] 訂閱列表 ${ list } 上找到 ${ count } 個用戶`)
+  logx( "FRS", `訂閱列表 ${ list } 上找到 ${ count } 個用戶`)
   if ( count == 0 ) return [];
   const target = lim ?? Math.max( Math.round( Math.random() * count ), Math.round( count / 2 ) );
-  log( `[FRS] 　　將會在訂閱列表 ${ list } 中選擇 ${ target } 個用戶`)
+  logx( "FRS", `　　將會在訂閱列表 ${ list } 中選擇 ${ target } 個用戶`)
 
   const records = getCleanRecords( list );
   const subAll  = getCleanRecords( "all" );
@@ -99,6 +100,7 @@ const getArbitraryUsers = ( rfc, subsc, list, lim ) => {
 
   const users = []
   while ( users.length < target ) {
+    /**  */
     const selected = wselect( curList );
 
     const notOnSingleList =
@@ -109,20 +111,21 @@ const getArbitraryUsers = ( rfc, subsc, list, lim ) => {
     let selRec = ( notOnSingleList ? subAll : records )[ selected ];
     if ( !selRec ) selRec = ( notOnSingleList ? subAll : records )[ selected ] = [];
 
-    log( `[FRS] 　　${ selected } （${ selRec.length }／${ curList[ selected ] }）`)
+    logx( "FRS", `　　${ selected } （${ selRec.length }／${ curList[ selected ] }）`)
     if (
       ( infList.includes( selected )
         || selRec.length < curList[ selected ] )
       && !frsRfc.includes( selected )
+      && rfc.lede_sig.user !== selected
     ) {
       users.push( selected );
       selRec.push( moment().toISOString() );
-      log( `[FRS] 　　已選擇`)
+      logx( "FRS", `　　已選擇`)
     }
     curList[ selected ] = 0;
 
     if ( !Object.values( curList ).reduce( ( a, b ) => a + b, 0 ) ) {
-      log( `[FRS] 　　沒有用戶可以選擇了！`)
+      logx( "FRS", `　　沒有用戶可以選擇了！`)
       break;
     }
   }
@@ -169,7 +172,7 @@ const sendToList = async ( bot, rfc, list, sendlist ) => {
     const u = new bot.User( user )
     const wt = await u.talkpage.text()
     if ( !allowBots( wt, "LuciferianBot" ) ) {
-      log( `[FRS] 跳過了 User talk:${ user }：用戶討論頁掛了nobots` )
+      logx( "FRS", `跳過了 User talk:${ user }：用戶討論頁掛了nobots` )
       continue;
     }
     try {
@@ -179,10 +182,10 @@ const sendToList = async ( bot, rfc, list, sendlist ) => {
         { summary: `[[Wikipedia:机器人/申请/LuciferianBot/6|機械人]]：發送[[WP:FRS]]討論邀請`,
           sectiontitle: `討論邀請：就${ rfcLists[ list ] }主題討論徵求意見` }
       )
-      log( `[FRS] 已發送訊息給 User talk:${ user }` )
+      logx( "FRS", `已發送訊息給 User talk:${ user }` )
     }
     catch ( err ) {
-      log( `[FRS] 未能發送訊息給 User talk:${ user }：${ err }` )
+      logx( "FRS", `未能發送訊息給 User talk:${ user }：${ err }` )
     }
   }
   return;
@@ -194,7 +197,9 @@ const sendToList = async ( bot, rfc, list, sendlist ) => {
  * @param { import('../RFC/update.mjs').RfcObj } rfc
  */
 export default async ( bot, rfc ) => {
-  log( `[FRS] 為 ${ rfc.page } 的RFC發送FRS通告` )
+  logx( "FRS", `為 ${ rfc.page } 的RFC發送FRS通告` )
+
+  await trycatch( updateJobStatus( bot, 6, 2 ) )
   
   try {
 
@@ -209,7 +214,12 @@ export default async ( bot, rfc ) => {
 
   }
   catch ( e ) {
-    log( `[FRS] [ERR] ${ e }` )
+    logx( "FRS", `[ERR] ${ e }` )
     console.trace( e )
+
+    await trycatch( updateJobStatus( bot, 6, 0 ) )
+    return;
   }
+
+  await updateJobStatus( bot, 6, 1 )
 }

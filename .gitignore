@@ -3,7 +3,8 @@
 .env
 compose.yaml
 Dockerfile
-db/*
-logs/*
-node_modules/*
+db
+logs
+node_modules
 src/test.mjs
+src copy

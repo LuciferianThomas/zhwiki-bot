@@ -3,19 +3,20 @@ import moment from 'moment';
 
 import { CronJob } from 'cron';
 
-import { time, capitalize, log } from '../fn.mjs';
+import { time, capitalize, log, logx, trycatch, updateJobStatus } from '../fn.mjs';
 
 const isIP = ( s ) => {
   return /(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))/.test( s )
 }
 
-export default async ( bot, newReqs ) => {
+const main = async ( bot, newReqs ) => {
+
   if ( !newReqs.length ) return;
   console.log( newReqs.map( r => r.name ) )
-  log( `[SPI] 發現新的CU請求：${ newReqs.map( r => r.name ) }` )
+  logx( "SPI", `發現新的CU請求：${ newReqs.map( r => r.name ) }` )
   // return;
   for ( var req of newReqs ) {
-    log( `[SPI] 分析新的CU請求：${ req.name }` )
+    logx( "SPI", `分析新的CU請求：${ req.name }` )
     let sockListTemplate = req.text.match( /\{\{sock[ _]list\|.*?\}\}/i )[0].split( /\|/g ).filter( m => !( /\{\{sock[ _]list|tools_link=/.test( m ) ) )
     let sockList = sockListTemplate.map( m => m.match( /^(?:\d+=)?(.*?)$/ )[1] )
     let qUsers = await bot.query( {
@@ -99,7 +100,25 @@ export default async ( bot, newReqs ) => {
       }
     } )
     console.log( newtext )
-    log( `[SPI] 已自動檢查 Wikipedia:傀儡調查/案件/${ req.name } 的CU請求` )
+    logx( "SPI", `已自動檢查 Wikipedia:傀儡調查/案件/${ req.name } 的CU請求` )
   }
   return;
+}
+
+export default async ( bot, newReqs ) => {
+  if ( !newReqs.length ) return;
+
+  await trycatch( updateJobStatus( bot, "4a", 2 ) )
+
+  try {
+    await main( bot, newReqs )
+  }
+  catch (e) {
+    logx( "SPI", `[ERR] ${ e }` )
+    console.trace( e )
+    await trycatch( updateJobStatus( bot, "4a", 0 ) )
+  }
+
+  await trycatch( updateJobStatus( bot, "4a", 1 ) )
+
 }
