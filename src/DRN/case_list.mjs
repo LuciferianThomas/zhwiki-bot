@@ -1,7 +1,7 @@
 import { Mwn } from 'mwn';
 import moment from 'moment';
 
-import { time, capitalize, log, logx, trycatch, updateJobStatus, parseSignature, editPage } from '../fn.mjs';
+import { time, capitalize, log, logx, trycatch, updateJobStatus, parseSignature, editPage, parse } from '../fn.mjs';
 
 /** @typedef { ({ name: string, status: string, text: string, last_comment: import('../fn.mjs').Signature, last_volunteer: import('../fn.mjs').Signature, file_user: string, file_time: Date }|{ name: string, status: string, error: string )[] } DRNCase */
 
@@ -55,14 +55,12 @@ async function getCaseDetails( bot, volunteers ) {
   let page = new bot.Page( `Wikipedia:爭議解決布告板` )
   logx( "DRN", `正在獲取 Wikipedia:爭議解決布告板 的資訊` )
 
-  let wikitext = await page.text()
+  const _wikitext = await page.text()
 
-  let wt = new bot.Wikitext( wikitext )
-
-  let wt_noTemplates = new bot.Wikitext( wikitext )
-  wt_noTemplates.parseSections().forEach( x => wt_noTemplates.removeEntity( x ) )
-
-  let sections = wt_noTemplates.parseSections().filter( x => x.level == 2 )
+  const wikitext = new bot.Wikitext( _wikitext )
+  wikitext.unbind();
+  const _sections = parseSections( wikitext )
+  const sections = groupSections( _sections, 2 )
 
   /** @type { DRNCase[] } */
   let cases = [];
@@ -207,10 +205,10 @@ export default async ( bot ) => {
     let volunteers = await getVolunteerList( bot )
     let cases = await getCaseDetails( bot, volunteers )
     let list = new bot.Page( TABLE_LOCATION )
-    await editPage( list, ( { content } ) => {
+    await editPage( bot, list, ( { content } ) => {
       return {
         text: generateCaseTable( cases ),
-        summary: `[[Wikipedia:机器人/申请/LuciferianBot/8|機械人測試]]：更新DRN列表（${ cases.length }活躍請求）`,
+        summary: `[[User:LuciferianBot/task/8|機械人測試]]：更新DRN列表（${ cases.length }活躍請求）`,
         bot: true
       }
     }, "DRN", `已完成更新DRN請求列表（${ cases.length }活躍請求）` )

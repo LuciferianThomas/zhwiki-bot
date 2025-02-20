@@ -4,14 +4,15 @@ import { CronJob } from 'cron';
 import moment from 'moment';
 
 import { time, log, logx, pruneLogs } from './fn.mjs';
-import genCaseList from './SPI/case_list.mjs';
+import updateSpiCaseList from './SPI/case_list.mjs';
 import getStewardComments from './SPI/steward_comment.mjs';
 
 import updateRfcList from './RFC/update.mjs';
 import updateTalkIndex from './TID/update.mjs';
 
-import { CDB } from './db.mjs'
-import update from './RFC/update.mjs';
+import updateDrnList from './DRN/case_list.mjs';
+
+import archiveUT from './UT/archive.mjs';
 
 // console.log( 'env', process.env )
 
@@ -32,15 +33,27 @@ await bot.login()
 
 log( `成功登入` )
 
-const main = async () => {
-  await genCaseList( bot )
+/**
+ * 
+ * @param { boolean } all 
+ */
+const main = async ( all ) => {
+  const now = moment()
+
+  await updateSpiCaseList( bot )
   await updateRfcList( bot )
   await updateTalkIndex( bot )
+  // await updateDrnList( bot )
+
+  // DAILY
+  if ( all || ( now.hour() == 0 && now.minute() < 10 ) ) {
+    await archiveUT( bot )
+  }
 }
 
 var job = new CronJob('0 */10 * * * *', main, null, true);
 job.start();
-await main()
+await main( true )
 
 // const srcuPage = 'User:LuciferianThomas/沙盒/3'
 const srcuPage = 'Steward requests/Checkuser' 

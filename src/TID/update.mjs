@@ -2,7 +2,7 @@ import { Mwn } from 'mwn'
 import { convert as html2Text } from 'html-to-text';
 import moment from 'moment';
 
-import { time, capitalize, $, log, logx, editPage, parseSignature, concatenateSections, trycatch, updateJobStatus } from '../fn.mjs';
+import { time, capitalize, $, log, logx, editPage, parseSignature, groupSections, trycatch, updateJobStatus, parseSections } from '../fn.mjs';
 import { CDB, hash } from '../db.mjs'
 
 const TID = new CDB( 'TID' )
@@ -94,7 +94,7 @@ const readTalkPages = async ( bot, prev, cutoff, entries ) => {
    */
   const toBeIndexed = [];
 
-  const sigRgx = /(\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? ((\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)))/i
+  const sigRgx = /(\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)([^|\]\/#]+)(?:.(?!\[\[(?:(?:U|User|UT|User talk|(?:用[戶户]|使用者)(?:討論)?):|(?:Special|特殊):用[戶户]貢[獻献]\/)(?:[^|\]\/#]+)))*? ((\d{4})年(\d{1,2})月(\d{1,2})日 \([一二三四五六日]\) (\d{2}):(\d{2}) \(UTC\)))(?:\[\[special:diff\/\d+\|加入\]\]。<\/span>)?/i
 
   for ( const [ idx, entry ] of entries.entries() ) {
 
@@ -115,9 +115,8 @@ const readTalkPages = async ( bot, prev, cutoff, entries ) => {
 
     const page = _page, wikitext = _wikitext
 
-    const _sections = wikitext.parseSections();
-    const sections = concatenateSections( _sections )
-      .filter( s => s.level <= 2 );
+    const _sections = parseSections( wikitext );
+    const sections = groupSections( _sections, 2 );
 
     const rfcTemplates = wikitext.parseTemplates( {
       namePredicate: str => /^rfc(?:[ _]subpage)?$/i.test( str )
@@ -273,10 +272,10 @@ const generateTalkIndex = async ( bot, prev, cutoff, entries ) => {
     try {
       const indexPage = new bot.Page( `Wikipedia:討論頁話題索引/topic list/NS${ ns }` )
     
-      await editPage( indexPage, () => {
+      await editPage( bot, indexPage, () => {
         return {
           text: pre + out,
-          summary: `[[Wikipedia:机器人/申请/LuciferianBot/7|機械人測試]]：生成NS${ ns }討論頁話題索引（${ entries.length }個活躍討論）`
+          summary: `[[User:LuciferianBot/task/7|機械人測試]]：生成NS${ ns }討論頁話題索引（${ entries.length }個活躍討論）`
         }
       }, "TID", `已生成NS${ ns }討論頁話題索引（${ entries.length }個活躍討論）`)
     }
